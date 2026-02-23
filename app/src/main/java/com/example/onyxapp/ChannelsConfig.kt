@@ -8,7 +8,8 @@ data class Channel(
 )
 
 object ChannelsConfig {
-    // Aquí puedes pegar tu lista M3U tal cual la tienes
+    const val PC_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
     val M3U_SOURCE = """
 #EXTM3U
 #EXTINF:-1 tvg-logo="https://static.wikia.nocookie.net/logopedia/images/c/c0/Las_Estrellas_2017_Navidad.svg/revision/latest/scale-to-width-down/250?cb=20230202024114&path-prefix=es" group-title="MEXICO",LAS ESTRELLAS HD
@@ -671,22 +672,47 @@ http://ott.cdn.iutpcdn.com/LIVE/H01/CANAL190/PROFILE03.m3u8
 http://51.222.43.170:8001/cristiancl/cirtianiptv/282467
 #EXTINF:-1 tvg-logo="https://upload.wikimedia.org/wikipedia/commons/thumb/3/36/Milenio_%282018-10-27%29.svg/1200px-Milenio_%282018-10-27%29.svg.png" group-title="NOTICIAS",MILENIO
 http://vlmain.hopto.org:25461/TuxChannel/9ee9g38Dj5ApATuypXTWJfBS/33
-`  """.trimIndent()
+"""
 
-    fun getChannels(): List<Channel> {
+    fun parseM3U(source: String): List<Channel> {
         val channels = mutableListOf<Channel>()
-        val lines = M3U_SOURCE.split("\n")
+        val lines = source.lines()
         var currentName = ""
         var currentLogo = ""
-        var currentGroup = ""
+        var currentGroup = "OTROS"
 
         for (line in lines) {
-            if (line.startsWith("#EXTINF")) {
-                currentName = line.substringAfterLast(",").trim()
-                currentLogo = line.substringAfter("tvg-logo=\"", "").substringBefore("\"", "")
-                currentGroup = line.substringAfter("group-title=\"", "").substringBefore("\"", "")
-            } else if (line.startsWith("http")) {
-                channels.add(Channel(currentName, line.trim(), currentLogo, currentGroup))
+            val trimmed = line.trim()
+            if (trimmed.isEmpty()) continue
+            
+            if (trimmed.startsWith("#EXTINF", ignoreCase = true)) {
+                // Extraer nombre (después de la última coma)
+                currentName = trimmed.substringAfterLast(",", "").trim()
+                
+                // Extraer logo con Regex flexible
+                val logoMatch = Regex("""tvg-logo\s*=\s*["']([^"']+)["']""", RegexOption.IGNORE_CASE).find(trimmed)
+                currentLogo = logoMatch?.groupValues?.get(1) ?: ""
+                
+                // Extraer grupo (varias etiquetas posibles)
+                val groupMatch = Regex("""(?:group-title|group|group-id)\s*=\s*["']([^"']+)["']""", RegexOption.IGNORE_CASE).find(trimmed)
+                if (groupMatch != null) {
+                    currentGroup = groupMatch.groupValues[1]
+                } else {
+                    // Intentar sin comillas si falla
+                    val groupMatchNoQuotes = Regex("""(?:group-title|group|group-id)\s*=\s*([^,\s]+)""", RegexOption.IGNORE_CASE).find(trimmed)
+                    if (groupMatchNoQuotes != null) {
+                        currentGroup = groupMatchNoQuotes.groupValues[1]
+                    }
+                }
+                
+                if (currentName.isEmpty()) currentName = "Canal"
+            } else if (trimmed.startsWith("#EXTGRP", ignoreCase = true)) {
+                currentGroup = trimmed.substringAfter(":").trim()
+            } else if (!trimmed.startsWith("#") && (trimmed.startsWith("http") || trimmed.contains("://"))) {
+                if (currentName.isNotEmpty()) {
+                    channels.add(Channel(currentName, trimmed, currentLogo, currentGroup.uppercase().trim()))
+                }
+                currentName = ""; currentLogo = ""
             }
         }
         return channels
