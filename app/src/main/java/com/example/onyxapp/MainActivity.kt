@@ -22,8 +22,10 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.*
@@ -105,6 +107,8 @@ fun LoginScreen(viewModel: MainViewModel) {
     val focusRequester = remember { FocusRequester() }
     val configuration = LocalConfiguration.current
     val isWideScreen = configuration.screenWidthDp > 800
+    val isPortrait = configuration.orientation == Configuration.ORIENTATION_PORTRAIT
+    val scrollState = rememberScrollState()
 
     LaunchedEffect(Unit) {
         delay(300)
@@ -125,12 +129,14 @@ fun LoginScreen(viewModel: MainViewModel) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier
-                .fillMaxWidth(if (isWideScreen) 0.35f else 0.85f)
+                .fillMaxWidth(if (isWideScreen) 0.35f else 0.9f)
                 .padding(24.dp)
+                .verticalScroll(scrollState)
         ) {
+            // Logo ONYX TV
             androidx.compose.material3.Text(
                 text = "ONYX TV",
-                fontSize = 56.sp,
+                fontSize = if (isPortrait) 48.sp else 56.sp,
                 color = Color.White,
                 fontWeight = FontWeight.Black,
                 letterSpacing = 0.sp,
@@ -146,15 +152,16 @@ fun LoginScreen(viewModel: MainViewModel) {
                 modifier = Modifier.padding(top = 8.dp)
             )
 
-            Spacer(modifier = Modifier.height(48.dp))
+            Spacer(modifier = Modifier.height(if (isPortrait) 32.dp else 48.dp))
 
+            // Formulario con efecto Glass
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(24.dp))
                     .background(Color.White.copy(alpha = 0.03f))
                     .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)), RoundedCornerShape(24.dp))
-                    .padding(32.dp)
+                    .padding(if (isPortrait) 20.dp else 32.dp)
             ) {
                 OutlinedTextField(
                     value = username,
@@ -202,7 +209,7 @@ fun LoginScreen(viewModel: MainViewModel) {
                     )
                 }
 
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(if (isPortrait) 24.dp else 32.dp))
 
                 if (viewModel.isLoading) {
                     Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -248,7 +255,6 @@ fun MainAppContent(viewModel: MainViewModel) {
     var showMenu by remember { mutableStateOf(true) }
     var lastInteractionTrigger by remember { mutableLongStateOf(System.currentTimeMillis()) }
 
-    // Categorías unificadas: Solo LIVE y AJUSTES
     val categories = listOf("LIVE", "AJUSTES")
     var selectedCategory by remember { mutableStateOf("LIVE") }
 
@@ -272,14 +278,12 @@ fun MainAppContent(viewModel: MainViewModel) {
 
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
         
-        // FONDO DEGRADADO
         if (showMenu) {
             Box(modifier = Modifier.fillMaxSize().background(
                 Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.8f), Color(0xFF003B4A).copy(alpha = 0.6f), Color.Black))
             ))
         }
 
-        // VIDEO DINÁMICO
         viewModel.mediaPlayer?.let { player ->
             val videoModifier = if (showMenu && !isPortrait) {
                 Modifier
@@ -313,7 +317,6 @@ fun MainAppContent(viewModel: MainViewModel) {
                 })
 
                 Column(modifier = Modifier.fillMaxSize()) {
-                    // TOP BAR
                     Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 25.dp, vertical = 15.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                         Column {
                             androidx.tv.material3.Text("ONYX TV", style = MaterialTheme.typography.displaySmall, color = Color.White, fontWeight = FontWeight.Black)
@@ -328,9 +331,8 @@ fun MainAppContent(viewModel: MainViewModel) {
                         }
                     }
 
-                    // PESTAÑAS LIVE / AJUSTES
                     LazyRow(modifier = Modifier.fillMaxWidth().padding(horizontal = 25.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        itemsIndexed(categories) { _, cat ->
+                        itemsIndexed(categories) { index, cat ->
                             CategoryTab(
                                 name = cat, isSelected = selectedCategory == cat,
                                 modifier = if (cat == selectedCategory) Modifier.focusRequester(initialFocusRequester) else Modifier
@@ -344,13 +346,8 @@ fun MainAppContent(viewModel: MainViewModel) {
                     Spacer(modifier = Modifier.height(15.dp))
 
                     Row(modifier = Modifier.fillMaxSize()) {
-                        // LISTA DE CANALES UNIFICADA
                         Column(modifier = Modifier.weight(0.42f).padding(start = 25.dp)) {
-                            androidx.tv.material3.Text(
-                                if (selectedCategory == "LIVE") "Todos los Canales" else "Configuración",
-                                color = Color.Gray, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(bottom = 8.dp)
-                            )
-
+                            androidx.tv.material3.Text("Canales", color = Color.Gray, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(bottom = 8.dp))
                             if (selectedCategory == "AJUSTES") {
                                 SettingsPanel(viewModel) { lastInteractionTrigger = System.currentTimeMillis() }
                             } else {
@@ -374,7 +371,6 @@ fun MainAppContent(viewModel: MainViewModel) {
                             }
                         }
 
-                        // INFO CANAL
                         Column(
                             modifier = Modifier.weight(0.58f).fillMaxHeight().padding(bottom = 30.dp, end = 40.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
@@ -383,7 +379,7 @@ fun MainAppContent(viewModel: MainViewModel) {
                             val currentChannel = viewModel.allChannels.find { it.url == viewModel.currentChannelUrl }
                             if (currentChannel != null) {
                                 androidx.tv.material3.Text(
-                                    text = currentChannel.name.uppercase(),
+                                    text = currentChannel.name.uppercase(), 
                                     style = MaterialTheme.typography.headlineSmall.copy(
                                         shadow = Shadow(color = Color.Black, blurRadius = 6f)
                                     ),
@@ -478,11 +474,7 @@ fun ChannelListItem(number: Int, channel: Channel, isSelected: Boolean, onClick:
                 modifier = Modifier.size(38.dp).clip(RoundedCornerShape(5.dp)), contentScale = ContentScale.Fit
             )
             Spacer(modifier = Modifier.width(12.dp))
-            androidx.tv.material3.Text(
-                text = channel.name, color = Color.White, style = MaterialTheme.typography.titleMedium,
-                fontSize = 15.sp, fontWeight = if (isSelected || isFocused) FontWeight.Bold else FontWeight.Normal,
-                maxLines = 1, overflow = TextOverflow.Ellipsis
-            )
+            androidx.tv.material3.Text(text = channel.name, color = Color.White, style = MaterialTheme.typography.titleMedium, fontSize = 15.sp, fontWeight = if (isSelected || isFocused) FontWeight.Bold else FontWeight.Normal, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
