@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1088457217520",
+    "project_id": "channels-13723",
+    "storage_bucket": "channels-13723.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1088457217520:android:6cedc516cae28b160e3935",
+        "android_client_info": {
+          "package_name": "com.example.onyxapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAn66P89vXW4wF116Rd--Qyy5jUPHiYqwM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
