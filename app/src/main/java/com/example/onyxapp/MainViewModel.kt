@@ -3,7 +3,6 @@ package com.example.onyxapp
 import android.app.Application
 import android.content.Context
 import android.net.Uri
-import android.util.Log
 import androidx.compose.runtime.*
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -56,6 +55,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     var currentTime by mutableStateOf("")
         private set
 
+    private var retryCount = 0
+    private val MAX_RETRIES = 3
+
     var externalM3uUrl by mutableStateOf(prefs.getString("external_m3u_url", "") ?: "")
         private set
 
@@ -71,6 +73,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     var userExpiryDate by mutableStateOf<Date?>(null)
         private set
 
+    var selectedGroup by mutableStateOf("TODOS")
+        private set
+
+    val availableGroups: List<String>
+        get() = listOf("TODOS", "FAVORITOS") + allChannels.mapNotNull { it.group }.distinct().sorted()
+
     val currentUsername: String
         get() = auth.currentUser?.email?.replace("@onyxtv.app", "") ?: "Invitado"
 
@@ -78,22 +86,87 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         initLibVLC()
         startClock()
         if (isUserAuthenticated) checkAuthorization() else isLoading = false
-        uploadLocalChannelsToFirestore()
+        handleFirestoreSync()
     }
 
     private fun initLibVLC() {
         try {
-            val args = arrayListOf("-vvv", "--http-user-agent=${ChannelsConfig.PC_USER_AGENT}", "--http-referrer=https://www.google.com/", "--network-caching=3000", "--rtsp-tcp")
+            val args = arrayListOf(
+                "-vvv", 
+                "--http-user-agent=${ChannelsConfig.PC_USER_AGENT}", 
+                "--network-caching=5000",
+                "--clock-jitter=0",
+                "--clock-synchro=0",
+                "--rtsp-tcp",
+                "--drop-late-frames",
+                "--skip-frames"
+            )
             libVlc = LibVLC(getApplication(), args)
             mediaPlayer = MediaPlayer(libVlc)
             mediaPlayer?.setEventListener { event ->
                 when (event.type) {
-                    MediaPlayer.Event.Buffering -> { isLoading = event.buffering < 100f }
-                    MediaPlayer.Event.Playing -> { isLoading = false; errorMessage = null }
-                    MediaPlayer.Event.EncounteredError -> { isLoading = false; errorMessage = "Error en el canal" }
+                    MediaPlayer.Event.Buffering -> { 
+                        isLoading = event.buffering < 100f 
+                        if (event.buffering >= 100f) errorMessage = null
+                    }
+                    MediaPlayer.Event.Playing -> { 
+                        isLoading = false
+                        errorMessage = null
+                        retryCount = 0
+                    }
+                    MediaPlayer.Event.EncounteredError -> { handlePlaybackError() }
+                    MediaPlayer.Event.EndReached -> { handlePlaybackError() }
                 }
             }
         } catch (e: Exception) { e.printStackTrace() }
+    }
+
+    private fun handlePlaybackError() {
+        isLoading = false
+        if (retryCount < MAX_RETRIES) {
+            retryCount++
+            errorMessage = "Reconectando canal ($retryCount/$MAX_RETRIES)..."
+            viewModelScope.launch {
+                delay(3000 * retryCount.toLong())
+                playVideo(currentChannelUrl, resetRetry = false)
+            }
+        } else {
+            errorMessage = "Canal no disponible temporalmente"
+        }
+    }
+
+    private fun handleFirestoreSync() {
+        val currentM3uHash = ChannelsConfig.M3U_SOURCE.hashCode().toString()
+        val savedHash = prefs.getString("last_m3u_hash", "")
+        if (currentM3uHash != savedHash) {
+            uploadLocalChannelsToFirestore(currentM3uHash)
+        }
+    }
+
+    private fun uploadLocalChannelsToFirestore(newHash: String) {
+        val channels = ChannelsConfig.parseM3U(ChannelsConfig.M3U_SOURCE)
+        val collectionRef = db.collection("channels")
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val snapshot = Tasks.await(collectionRef.get())
+                if (!snapshot.isEmpty) {
+                    snapshot.documents.chunked(500).forEach { chunk ->
+                        val batch = db.batch()
+                        chunk.forEach { batch.delete(it.reference) }
+                        Tasks.await(batch.commit())
+                    }
+                }
+                channels.chunked(500).forEach { chunk ->
+                    val batch = db.batch()
+                    chunk.forEachIndexed { i, c ->
+                        val d = hashMapOf("name" to c.name, "url" to c.url, "logo" to c.logo, "group" to c.group, "order" to i)
+                        batch.set(collectionRef.document(), d)
+                    }
+                    Tasks.await(batch.commit())
+                }
+                prefs.edit().putString("last_m3u_hash", newHash).apply()
+            } catch (e: Exception) { e.printStackTrace() }
+        }
     }
 
     fun signIn(username: String, pass: String) {
@@ -178,57 +251,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
     }
 
-    fun updateExternalM3U(url: String) {
-        externalM3uUrl = url
-        prefs.edit().putString("external_m3u_url", url).apply()
-        loadExternalChannels(url)
-    }
-
-    private fun loadExternalChannels(url: String) {
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val channels = ChannelsConfig.parseM3U(url)
-                withContext(Dispatchers.Main) { allChannels = channels; onChannelsLoaded() }
-            } catch (e: Exception) {}
-        }
-    }
-
-    fun uploadLocalChannelsToFirestore() {
-        val channels = ChannelsConfig.parseM3U(ChannelsConfig.M3U_SOURCE)
-        val collectionRef = db.collection("channels")
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val snapshot = Tasks.await(collectionRef.get())
-                if (!snapshot.isEmpty) {
-                    snapshot.documents.chunked(500).forEach { chunk ->
-                        val batch = db.batch()
-                        chunk.forEach { batch.delete(it.reference) }
-                        Tasks.await(batch.commit())
-                    }
-                }
-                channels.chunked(500).forEach { chunk ->
-                    val batch = db.batch()
-                    chunk.forEachIndexed { i, c ->
-                        val d = hashMapOf("name" to c.name, "url" to c.url, "logo" to c.logo, "group" to c.group, "order" to i)
-                        batch.set(collectionRef.document(), d)
-                    }
-                    Tasks.await(batch.commit())
-                }
-            } catch (e: Exception) {}
-        }
-    }
-
-    private fun loadLocalChannels() {
-        viewModelScope.launch {
-            val source = if (externalM3uUrl.isNotEmpty()) externalM3uUrl else ChannelsConfig.M3U_SOURCE
-            allChannels = withContext(Dispatchers.IO) { ChannelsConfig.parseM3U(source) }
-            onChannelsLoaded()
-        }
-    }
-
     private fun onChannelsLoaded() {
-        filterChannels()
         loadFavorites()
+        filterChannels()
         if (currentChannelUrl.isEmpty() && allChannels.isNotEmpty()) {
             val savedUrl = prefs.getString("last_channel_url", "") ?: ""
             playVideo(if (savedUrl.isNotEmpty() && allChannels.any { it.url == savedUrl }) savedUrl else allChannels[0].url)
@@ -238,31 +263,64 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun updateSearchQuery(q: String) { searchQuery = q; filterChannels() }
 
-    private fun filterChannels() {
-        filteredChannels = if (searchQuery.isEmpty()) allChannels else allChannels.filter { it.name.contains(searchQuery, true) }
+    fun updateSelectedGroup(group: String) {
+        selectedGroup = group
+        filterChannels()
     }
 
-    fun playVideo(url: String) {
+    private fun filterChannels() {
+        val baseList = when (selectedGroup) {
+            "TODOS" -> allChannels
+            "FAVORITOS" -> favorites.toList()
+            else -> allChannels.filter { it.group == selectedGroup }
+        }
+        
+        filteredChannels = if (searchQuery.isEmpty()) {
+            baseList
+        } else {
+            baseList.filter { it.name.contains(searchQuery, true) }
+        }
+    }
+
+    fun playVideo(url: String, resetRetry: Boolean = true) {
         if (url.isEmpty()) return
+        if (resetRetry) {
+            retryCount = 0
+            errorMessage = null
+        }
         currentChannelUrl = url
         isLoading = true
-        try {
-            mediaPlayer?.stop()
-            val media = Media(libVlc, Uri.parse(url))
-            media.addOption(":http-user-agent=${ChannelsConfig.PC_USER_AGENT}")
-            media.addOption(":network-caching=3000")
-            mediaPlayer?.media = media
-            media.release()
-            mediaPlayer?.play()
-            prefs.edit().putString("last_channel_url", url).apply()
-        } catch (e: Exception) { isLoading = false }
+        
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                mediaPlayer?.stop()
+                val media = Media(libVlc, Uri.parse(url))
+                media.addOption(":http-user-agent=${ChannelsConfig.PC_USER_AGENT}")
+                media.addOption(":network-caching=5000")
+                media.addOption(":clock-jitter=0")
+                
+                withContext(Dispatchers.Main) {
+                    mediaPlayer?.media = media
+                    media.release()
+                    mediaPlayer?.play()
+                }
+                if (resetRetry) prefs.edit().putString("last_channel_url", url).apply()
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) { isLoading = false }
+            }
+        }
     }
 
     fun stopPlayback() { mediaPlayer?.stop() }
 
     fun toggleFavorite(c: Channel) {
-        if (favorites.any { it.url == c.url }) favorites.removeAll { it.url == c.url } else favorites.add(c)
+        if (favorites.any { it.url == c.url }) {
+            favorites.removeAll { it.url == c.url }
+        } else {
+            favorites.add(c)
+        }
         prefs.edit().putStringSet("favorites_urls", favorites.map { it.url }.toSet()).apply()
+        if (selectedGroup == "FAVORITOS") filterChannels()
     }
 
     private fun loadFavorites() {
@@ -275,7 +333,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             while (true) {
                 val now = Date()
-                // Formato 24h para Mazatlán (GMT-7)
                 val sdf = SimpleDateFormat("HH:mm:ss", Locale.US)
                 sdf.timeZone = TimeZone.getTimeZone("America/Mazatlan")
                 currentTime = sdf.format(now)
