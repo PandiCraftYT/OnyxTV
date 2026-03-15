@@ -17,6 +17,7 @@ import kotlinx.coroutines.withContext
 import org.videolan.libvlc.LibVLC
 import org.videolan.libvlc.Media
 import org.videolan.libvlc.MediaPlayer
+import java.net.URL
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -44,10 +45,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         private set
 
     var isLoading by mutableStateOf(true)
-        private set
 
     var errorMessage by mutableStateOf<String?>(null)
-        private set
 
     var searchQuery by mutableStateOf("")
         private set
@@ -58,22 +57,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var retryCount = 0
     private val MAX_RETRIES = 3
 
-    var externalM3uUrl by mutableStateOf(prefs.getString("external_m3u_url", "") ?: "")
-        private set
-
     var isUserAuthenticated by mutableStateOf(auth.currentUser != null)
         private set
     var isUserAuthorized by mutableStateOf(false)
         private set
+    var isAdmin by mutableStateOf(false)
+
     var authError by mutableStateOf<String?>(null)
         private set
     var accountStatusMessage by mutableStateOf<String?>(null)
         private set
-    
+
     var userExpiryDate by mutableStateOf<Date?>(null)
         private set
 
     var selectedGroup by mutableStateOf("TODOS")
+        private set
+
+    // Nueva variable para el aspecto dinámico del video
+    var videoAspectRatio by mutableStateOf(16f / 9f)
         private set
 
     val availableGroups: List<String>
@@ -82,18 +84,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val currentUsername: String
         get() = auth.currentUser?.email?.replace("@onyxtv.app", "") ?: "Invitado"
 
+    // Lista de usuarios para el panel admin
+    var allUsers = mutableStateListOf<Map<String, Any>>()
+        private set
+
     init {
         initLibVLC()
         startClock()
         if (isUserAuthenticated) checkAuthorization() else isLoading = false
-        handleFirestoreSync()
     }
 
     private fun initLibVLC() {
         try {
             val args = arrayListOf(
-                "-vvv", 
-                "--http-user-agent=${ChannelsConfig.PC_USER_AGENT}", 
+                "-vvv",
+                "--http-user-agent=${ChannelsConfig.PC_USER_AGENT}",
                 "--network-caching=5000",
                 "--clock-jitter=0",
                 "--clock-synchro=0",
@@ -105,20 +110,36 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             mediaPlayer = MediaPlayer(libVlc)
             mediaPlayer?.setEventListener { event ->
                 when (event.type) {
-                    MediaPlayer.Event.Buffering -> { 
-                        isLoading = event.buffering < 100f 
+                    MediaPlayer.Event.Buffering -> {
+                        isLoading = event.buffering < 100f
                         if (event.buffering >= 100f) errorMessage = null
                     }
-                    MediaPlayer.Event.Playing -> { 
+                    MediaPlayer.Event.Playing -> {
                         isLoading = false
                         errorMessage = null
                         retryCount = 0
+                        updateVideoSize()
                     }
                     MediaPlayer.Event.EncounteredError -> { handlePlaybackError() }
                     MediaPlayer.Event.EndReached -> { handlePlaybackError() }
+                    MediaPlayer.Event.Vout -> { updateVideoSize() }
                 }
             }
         } catch (e: Exception) { e.printStackTrace() }
+    }
+
+    private fun updateVideoSize() {
+        viewModelScope.launch(Dispatchers.Main) {
+            mediaPlayer?.let { player ->
+                val track = player.currentVideoTrack
+                if (track != null && track.width > 0 && track.height > 0) {
+                    val newAspect = track.width.toFloat() / track.height.toFloat()
+                    if (newAspect in 0.5f..2.5f) { // Validar rangos razonables
+                        videoAspectRatio = newAspect
+                    }
+                }
+            }
+        }
     }
 
     private fun handlePlaybackError() {
@@ -135,39 +156,82 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun handleFirestoreSync() {
-        val currentM3uHash = ChannelsConfig.M3U_SOURCE.hashCode().toString()
-        val savedHash = prefs.getString("last_m3u_hash", "")
-        if (currentM3uHash != savedHash) {
-            uploadLocalChannelsToFirestore(currentM3uHash)
+    // --- FUNCIONES DE ADMINISTRADOR (MANUALES POR BOTÓN) ---
+
+    fun updateChannelsFromUrl(url: String) {
+        if (!isAdmin) return
+        isLoading = true
+        authError = null
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val m3uContent = URL(url).readText()
+                val newChannels = ChannelsConfig.parseM3U(m3uContent)
+
+                if (newChannels.isNotEmpty()) {
+                    uploadChannelsToFirestore(newChannels)
+                    withContext(Dispatchers.Main) {
+                        authError = "EXITO: ${newChannels.size} canales actualizados."
+                        observeChannels()
+                    }
+                } else {
+                    withContext(Dispatchers.Main) { authError = "ERROR: La lista está vacía." }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) { authError = "ERROR: ${e.localizedMessage}" }
+            } finally {
+                withContext(Dispatchers.Main) { isLoading = false }
+            }
         }
     }
 
-    private fun uploadLocalChannelsToFirestore(newHash: String) {
-        val channels = ChannelsConfig.parseM3U(ChannelsConfig.M3U_SOURCE)
+    private suspend fun uploadChannelsToFirestore(channels: List<Channel>) {
         val collectionRef = db.collection("channels")
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val snapshot = Tasks.await(collectionRef.get())
-                if (!snapshot.isEmpty) {
-                    snapshot.documents.chunked(500).forEach { chunk ->
-                        val batch = db.batch()
-                        chunk.forEach { batch.delete(it.reference) }
-                        Tasks.await(batch.commit())
-                    }
-                }
-                channels.chunked(500).forEach { chunk ->
+        try {
+            val snapshot = Tasks.await(collectionRef.get())
+            if (!snapshot.isEmpty) {
+                snapshot.documents.chunked(500).forEach { chunk ->
                     val batch = db.batch()
-                    chunk.forEachIndexed { i, c ->
-                        val d = hashMapOf("name" to c.name, "url" to c.url, "logo" to c.logo, "group" to c.group, "order" to i)
-                        batch.set(collectionRef.document(), d)
-                    }
+                    chunk.forEach { batch.delete(it.reference) }
                     Tasks.await(batch.commit())
                 }
-                prefs.edit().putString("last_m3u_hash", newHash).apply()
-            } catch (e: Exception) { e.printStackTrace() }
+            }
+
+            channels.chunked(500).forEach { chunk ->
+                val batchInsert = db.batch()
+                chunk.forEachIndexed { index, channel ->
+                    val doc = collectionRef.document()
+                    batchInsert.set(doc, hashMapOf(
+                        "name" to channel.name,
+                        "url" to channel.url,
+                        "logo" to channel.logo,
+                        "group" to channel.group,
+                        "order" to index
+                    ))
+                }
+                Tasks.await(batchInsert.commit())
+            }
+        } catch (e: Exception) { e.printStackTrace() }
+    }
+
+    fun fetchAllUsers() {
+        if (!isAdmin) return
+        db.collection("users").get().addOnSuccessListener { snapshot ->
+            allUsers.clear()
+            allUsers.addAll(snapshot.documents.map { doc ->
+                val data = doc.data?.toMutableMap() ?: mutableMapOf()
+                data["uid"] = doc.id
+                data
+            })
         }
     }
+
+    fun toggleUserStatus(uid: String, currentStatus: Boolean) {
+        if (!isAdmin) return
+        db.collection("users").document(uid).update("isActive", !currentStatus)
+            .addOnSuccessListener { fetchAllUsers() }
+    }
+
+    // --- FIN FUNCIONES ADMIN ---
 
     fun signIn(username: String, pass: String) {
         if (username.isEmpty() || pass.isEmpty()) { authError = "Completa los campos"; return }
@@ -190,9 +254,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
                 if (snapshot != null && snapshot.exists()) {
                     val data = snapshot.data ?: emptyMap()
+
+                    val role = snapshot.getString("role") ?: "USER"
+                    isAdmin = role.uppercase() == "ADMIN"
+
                     val activeKey = data.keys.find { it.equals("isActive", true) }
                     val rawIsActive = if (activeKey != null) data[activeKey] else null
-                    
+
                     val isActive = when(rawIsActive) {
                         is Boolean -> rawIsActive
                         is String -> rawIsActive.trim().lowercase() == "true"
@@ -220,6 +288,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     val newUserData = hashMapOf(
                         "username" to (user.email?.replace("@onyxtv.app", "") ?: "user"),
                         "isActive" to false,
+                        "role" to "USER",
                         "expiryDate" to com.google.firebase.Timestamp(Date(System.currentTimeMillis() + 2592000000L)),
                         "uid" to uid
                     )
@@ -235,19 +304,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         auth.signOut()
         isUserAuthenticated = false
         isUserAuthorized = false
+        isAdmin = false
         userExpiryDate = null
         stopPlayback()
     }
 
     private fun observeChannels() {
         db.collection("channels").orderBy("order", Query.Direction.ASCENDING)
-            .addSnapshotListener { snapshot, _ ->
+            .get()
+            .addOnSuccessListener { snapshot ->
                 if (snapshot != null) {
                     allChannels = snapshot.documents.mapNotNull { doc ->
                         Channel(doc.getString("name") ?: "", doc.getString("url") ?: "", doc.getString("logo"), doc.getString("group"))
                     }
                     onChannelsLoaded()
                 }
+            }
+            .addOnFailureListener {
+                isLoading = false
             }
     }
 
@@ -274,7 +348,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             "FAVORITOS" -> favorites.toList()
             else -> allChannels.filter { it.group == selectedGroup }
         }
-        
+
         filteredChannels = if (searchQuery.isEmpty()) {
             baseList
         } else {
@@ -287,10 +361,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (resetRetry) {
             retryCount = 0
             errorMessage = null
+            videoAspectRatio = 16f / 9f // Resetear aspecto al cambiar canal
         }
         currentChannelUrl = url
         isLoading = true
-        
+
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 mediaPlayer?.stop()
@@ -298,7 +373,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 media.addOption(":http-user-agent=${ChannelsConfig.PC_USER_AGENT}")
                 media.addOption(":network-caching=5000")
                 media.addOption(":clock-jitter=0")
-                
+
                 withContext(Dispatchers.Main) {
                     mediaPlayer?.media = media
                     media.release()
@@ -336,7 +411,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val sdf = SimpleDateFormat("HH:mm:ss", Locale.US)
                 sdf.timeZone = TimeZone.getTimeZone("America/Mazatlan")
                 currentTime = sdf.format(now)
-                
+
                 if (isUserAuthorized) {
                     userExpiryDate?.let { expiry ->
                         if (now.after(expiry)) {
