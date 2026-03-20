@@ -69,6 +69,7 @@ dependencies {
     implementation(libs.androidx.tv.material)
     implementation("androidx.compose.material3:material3")
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.activity.compose)
     implementation("io.coil-kt:coil-compose:2.5.0")
     implementation("io.coil-kt:coil-svg:2.5.0")

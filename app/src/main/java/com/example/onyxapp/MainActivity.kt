@@ -1,16 +1,15 @@
-@file:OptIn(ExperimentalTvMaterial3Api::class)
 package com.example.onyxapp
 
 import android.app.Activity
-import android.content.res.Configuration
 import android.os.Bundle
-import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
-import androidx.activity.viewModels
 import androidx.compose.animation.*
-import androidx.compose.foundation.*
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.*
@@ -21,17 +20,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.MaterialTheme as M3MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
-import androidx.compose.material3.Text as M3Text
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -41,21 +31,21 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
-import androidx.compose.ui.graphics.vector.rememberVectorPainter
-import androidx.compose.ui.input.key.*
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.compose.ui.zIndex
-import androidx.tv.material3.*
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.tv.material3.Border
+import androidx.tv.material3.ClickableSurfaceDefaults
+import androidx.tv.material3.ExperimentalTvMaterial3Api
+import androidx.tv.material3.Surface
 import coil.compose.AsyncImage
 import kotlinx.coroutines.delay
 import org.videolan.libvlc.MediaPlayer
@@ -63,39 +53,25 @@ import org.videolan.libvlc.util.VLCVideoLayout
 import java.text.SimpleDateFormat
 import java.util.*
 
+@OptIn(ExperimentalTvMaterial3Api::class)
 class MainActivity : ComponentActivity() {
-    private val viewModel: MainViewModel by viewModels()
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-
         setContent {
-            M3MaterialTheme {
-                var showSplash by remember { mutableStateOf(true) }
-
-                if (showSplash) {
-                    SplashScreen { showSplash = false }
-                } else {
-                    val isAuthenticated = viewModel.isUserAuthenticated
-                    val isAuthorized = viewModel.isUserAuthorized
-
-                    if (!isAuthenticated || !isAuthorized) {
-                        LoginScreen(viewModel)
-                    } else {
-                        MainAppContent(viewModel)
-                    }
-                }
+            val viewModel: MainViewModel = viewModel()
+            OnyxAppTheme {
+                MainScreen(viewModel)
             }
         }
     }
 }
 
+@OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-fun MainAppContent(viewModel: MainViewModel) {
+fun MainScreen(viewModel: MainViewModel) {
     val context = LocalContext.current
     val configuration = LocalConfiguration.current
-    val isPortrait = configuration.orientation == Configuration.ORIENTATION_PORTRAIT
+    val isPortrait = configuration.orientation == android.content.res.Configuration.ORIENTATION_PORTRAIT
 
     var showMenu by remember { mutableStateOf(true) }
     val lastInteractionTrigger = remember { mutableLongStateOf(System.currentTimeMillis()) }
@@ -124,6 +100,7 @@ fun MainAppContent(viewModel: MainViewModel) {
     BackHandler { if (showMenu) showMenu = false else (context as? Activity)?.finishAffinity() }
 
     Box(modifier = Modifier.fillMaxSize()) {
+        // Usamos la implementación de AnimatedBackground.kt
         AnimatedBackground()
 
         // 1. REPRODUCTOR DE VIDEO
@@ -171,8 +148,13 @@ fun MainAppContent(viewModel: MainViewModel) {
 
                     Spacer(modifier = Modifier.height(25.dp))
 
-                    // CATEGORÍAS
-                    LazyRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(15.dp)) {
+                    // CATEGORÍAS - Centradas y con padding vertical para evitar cortes
+                    LazyRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(15.dp, Alignment.CenterHorizontally),
+                        verticalAlignment = Alignment.CenterVertically,
+                        contentPadding = PaddingValues(vertical = 8.dp)
+                    ) {
                         itemsIndexed(categories) { _, cat ->
                             CategoryTab(
                                 name = cat,
@@ -191,7 +173,8 @@ fun MainAppContent(viewModel: MainViewModel) {
                         text = if (selectedCategory == "LIVE") "CANALES EN VIVO" else selectedCategory, 
                         color = Color.White.copy(alpha = 0.4f), 
                         style = MaterialTheme.typography.labelLarge, 
-                        modifier = Modifier.padding(bottom = 15.dp),
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 15.dp),
+                        textAlign = TextAlign.Center,
                         letterSpacing = 1.5.sp
                     )
 
@@ -248,23 +231,9 @@ fun MainAppContent(viewModel: MainViewModel) {
                             )
                             Text(
                                 text = currentChannel.group ?: "GENERAL",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = Color(0xFF00B4D8),
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(top = 4.dp)
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = Color(0xFF00B4D8), fontWeight = FontWeight.Bold
                             )
-                            Spacer(modifier = Modifier.height(20.dp))
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier
-                                    .background(Color.Red.copy(alpha = 0.15f), CircleShape)
-                                    .border(1.dp, Color.Red.copy(alpha = 0.3f), CircleShape)
-                                    .padding(horizontal = 16.dp, vertical = 6.dp)
-                            ) {
-                                Box(modifier = Modifier.size(8.dp).background(Color.Red, CircleShape))
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("EN VIVO", color = Color.White, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-                            }
                         }
                     }
                 }
@@ -273,8 +242,17 @@ fun MainAppContent(viewModel: MainViewModel) {
     }
 }
 
+@OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-fun ChannelListItem(number: Int, channel: Channel, isSelected: Boolean, isFavorite: Boolean, onClick: () -> Unit, onFocus: () -> Unit, onRight: () -> Unit) {
+fun ChannelListItem(
+    number: Int,
+    channel: Channel,
+    isSelected: Boolean,
+    isFavorite: Boolean,
+    onClick: () -> Unit,
+    onFocus: () -> Unit,
+    onRight: () -> Unit
+) {
     val interactionSource = remember { MutableInteractionSource() }
     val isFocused by interactionSource.collectIsFocusedAsState()
 
@@ -282,96 +260,77 @@ fun ChannelListItem(number: Int, channel: Channel, isSelected: Boolean, isFavori
 
     Surface(
         onClick = onClick,
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.05f),
         modifier = Modifier
             .fillMaxWidth()
-            .height(70.dp)
-            .onKeyEvent {
-                if (it.type == KeyEventType.KeyDown && it.key == Key.DirectionRight) {
-                    onRight()
-                    true
-                } else false
-            },
+            .height(75.dp),
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(16.dp)),
-        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.05f),
         colors = ClickableSurfaceDefaults.colors(
             containerColor = if (isSelected) Color(0xFF00B4D8).copy(alpha = 0.2f) else Color.White.copy(alpha = 0.05f),
-            focusedContainerColor = Color.White.copy(alpha = 0.15f)
+            focusedContainerColor = Color.White.copy(alpha = 0.2f)
         ),
-        border = ClickableSurfaceDefaults.border(focusedBorder = Border(BorderStroke(2.dp, Color(0xFF00B4D8)))),
+        border = ClickableSurfaceDefaults.border(
+            focusedBorder = Border(BorderStroke(2.dp, if (isSelected) Color(0xFF00B4D8) else Color.White))
+        ),
         interactionSource = interactionSource
     ) {
-        Row(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(modifier = Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+        Row(
+            modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = String.format("%03d", number),
+                style = MaterialTheme.typography.titleLarge,
+                color = if (isFocused || isSelected) Color(0xFF00B4D8) else Color.White.copy(alpha = 0.3f),
+                fontWeight = FontWeight.Bold
+            )
+            
+            Spacer(modifier = Modifier.width(20.dp))
+            
+            Box(
+                modifier = Modifier
+                    .size(50.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color.White.copy(alpha = 0.1f))
+            ) {
                 AsyncImage(
-                    model = channel.logo, 
-                    contentDescription = null, 
-                    placeholder = rememberVectorPainter(Icons.Default.Tv), 
-                    modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp)).background(Color.Black.copy(alpha = 0.3f)), 
+                    model = channel.logo,
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Fit
                 )
             }
+
             Spacer(modifier = Modifier.width(20.dp))
-            Box(modifier = Modifier.width(40.dp), contentAlignment = Alignment.Center) {
-                if (isSelected) {
-                    Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color(0xFF00B4D8), modifier = Modifier.size(24.dp))
-                } else {
-                    Text(text = number.toString(), color = if (isFocused) Color.White else Color.White.copy(alpha = 0.5f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Black, textAlign = TextAlign.Center)
-                }
-            }
-            Spacer(modifier = Modifier.width(10.dp))
-            Text(
-                text = channel.name, 
-                color = Color.White, 
-                modifier = Modifier.weight(1f),
-                style = MaterialTheme.typography.titleLarge, 
-                fontSize = 19.sp, 
-                fontWeight = if (isSelected || isFocused) FontWeight.Bold else FontWeight.Medium, 
-                maxLines = 1, 
-                overflow = TextOverflow.Ellipsis
-            )
-
-            if (isFavorite) {
-                Icon(Icons.Default.Favorite, contentDescription = null, tint = Color(0xFFFF4D6D), modifier = Modifier.size(20.dp))
-            }
-        }
-    }
-}
-
-@Composable
-fun AccountInfoCard(viewModel: MainViewModel) {
-    val expiryStr = viewModel.userExpiryDate?.let { SimpleDateFormat("dd MMM, yyyy", Locale.getDefault()).format(it) } ?: "..."
-    
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(22.dp))
-            .background(Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.1f), Color.White.copy(alpha = 0.05f))))
-            .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(22.dp))
-            .padding(16.dp)
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                modifier = Modifier
-                    .size(46.dp)
-                    .background(if (viewModel.isAdmin) Color(0xFFFFD700).copy(alpha = 0.2f) else Color(0xFF00B4D8).copy(alpha = 0.2f), CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = if (viewModel.isAdmin) Icons.Default.Shield else Icons.Default.AccountCircle, 
-                    contentDescription = null, 
-                    tint = if (viewModel.isAdmin) Color(0xFFFFD700) else Color(0xFF00B4D8), 
-                    modifier = Modifier.size(28.dp)
+            
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = channel.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = channel.group ?: "General",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.5f)
                 )
             }
-            Spacer(modifier = Modifier.width(16.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(viewModel.currentUsername.uppercase(), color = Color.White, fontWeight = FontWeight.Black, style = MaterialTheme.typography.labelLarge, letterSpacing = 1.sp)
-                Text("Suscripción hasta: $expiryStr", color = Color.White.copy(alpha = 0.6f), style = MaterialTheme.typography.labelSmall)
+
+            if (isFavorite) {
+                Icon(Icons.Default.Favorite, contentDescription = null, tint = Color.Red, modifier = Modifier.size(20.dp))
+            }
+            
+            if (isFocused) {
+                Icon(Icons.Default.ChevronRight, contentDescription = null, tint = Color.White.copy(alpha = 0.5f))
             }
         }
     }
 }
 
+@OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun CategoryTab(name: String, isSelected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val interactionSource = remember { MutableInteractionSource() }
@@ -380,7 +339,7 @@ fun CategoryTab(name: String, isSelected: Boolean, modifier: Modifier = Modifier
     Surface(
         onClick = onClick,
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1.1f),
-        modifier = modifier.height(48.dp).widthIn(min = 120.dp),
+        modifier = modifier.height(48.dp).widthIn(min = 100.dp),
         shape = ClickableSurfaceDefaults.shape(CircleShape),
         colors = ClickableSurfaceDefaults.colors(
             containerColor = if (isSelected) Color(0xFF00B4D8) else Color.White.copy(alpha = 0.1f),
@@ -389,13 +348,14 @@ fun CategoryTab(name: String, isSelected: Boolean, modifier: Modifier = Modifier
         border = ClickableSurfaceDefaults.border(focusedBorder = Border(BorderStroke(2.dp, Color.White))),
         interactionSource = interactionSource
     ) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Box(modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp), contentAlignment = Alignment.Center) {
             Text(
                 text = name, 
                 color = Color.White,
                 style = MaterialTheme.typography.labelLarge, 
                 fontWeight = FontWeight.ExtraBold,
-                textAlign = TextAlign.Center
+                textAlign = TextAlign.Center,
+                maxLines = 1
             )
         }
     }
@@ -415,118 +375,121 @@ fun VideoPlayer(mediaPlayer: MediaPlayer, modifier: Modifier) {
 }
 
 @Composable
+fun AccountInfoCard(viewModel: MainViewModel) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(if (viewModel.isAdmin) Color(0xFFFFD700).copy(alpha = 0.2f) else Color(0xFF00B4D8).copy(alpha = 0.1f))
+            .border(1.dp, if (viewModel.isAdmin) Color(0xFFFFD700).copy(alpha = 0.3f) else Color(0xFF00B4D8).copy(alpha = 0.2f), RoundedCornerShape(20.dp))
+            .padding(15.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            val imageVector = if (viewModel.isAdmin) Icons.Default.Shield else Icons.Default.AccountCircle
+            Icon(
+                imageVector = imageVector, 
+                contentDescription = null, 
+                tint = if (viewModel.isAdmin) Color(0xFFFFD700) else Color(0xFF00B4D8), 
+                modifier = Modifier.size(32.dp)
+            )
+            Spacer(modifier = Modifier.width(15.dp))
+            Column {
+                Text(viewModel.currentUsername.uppercase(), style = MaterialTheme.typography.titleSmall, color = Color.White, fontWeight = FontWeight.Black)
+                val expiryStr = viewModel.userExpiryDate?.let { SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(it) } ?: "N/A"
+                Text("Expira: $expiryStr", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.6f))
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
 fun SettingsPanel(viewModel: MainViewModel, onInteraction: () -> Unit) {
-    Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(end = 20.dp)) {
-        Text("CONFIGURACIÓN", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black)
-        Spacer(modifier = Modifier.height(20.dp))
+    Column(modifier = Modifier.fillMaxSize().padding(10.dp), verticalArrangement = Arrangement.spacedBy(15.dp)) {
+        Text("CONFIGURACIÓN", style = MaterialTheme.typography.titleMedium, color = Color.White, fontWeight = FontWeight.Bold)
         
         SettingToggle("Modo Administrador", viewModel.isAdmin) { 
             viewModel.isAdmin = it
             onInteraction()
         }
         
-        Spacer(modifier = Modifier.height(15.dp))
-        
-        Button(
-            onClick = { viewModel.logout(); onInteraction() },
-            colors = ButtonDefaults.buttonColors(containerColor = Color.Red.copy(alpha = 0.2f)),
-            modifier = Modifier.fillMaxWidth().height(56.dp),
-            shape = RoundedCornerShape(16.dp)
-        ) {
-            Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null, tint = Color.Red)
-            Spacer(modifier = Modifier.width(12.dp))
-            M3Text("CERRAR SESIÓN", color = Color.Red, fontWeight = FontWeight.Bold)
+        SettingButton("Cerrar Sesión", Icons.Default.ExitToApp, Color.Red) {
+            viewModel.logout()
+            onInteraction()
         }
     }
 }
 
+@OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun SettingToggle(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color.White.copy(alpha = 0.05f)).padding(16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
+    val interactionSource = remember { MutableInteractionSource() }
+    val isFocused by interactionSource.collectIsFocusedAsState()
+
+    Surface(
+        onClick = { onCheckedChange(!checked) },
+        modifier = Modifier.fillMaxWidth().height(60.dp),
+        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(12.dp)),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = Color.White.copy(alpha = 0.05f),
+            focusedContainerColor = Color.White.copy(alpha = 0.15f)
+        ),
+        interactionSource = interactionSource
     ) {
-        M3Text(label, color = Color.White, fontWeight = FontWeight.Medium)
-        Switch(
-            checked = checked, 
-            onCheckedChange = onCheckedChange,
-            colors = SwitchDefaults.colors(checkedThumbColor = Color(0xFF00B4D8), checkedTrackColor = Color(0xFF00B4D8).copy(alpha = 0.5f))
+        Row(
+            modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(label, color = Color.White)
+            Switch(checked = checked, onCheckedChange = null, colors = SwitchDefaults.colors(checkedThumbColor = Color(0xFF00B4D8)))
+        }
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+fun SettingButton(label: String, icon: ImageVector, color: Color, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth().height(60.dp),
+        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(12.dp)),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = Color.White.copy(alpha = 0.05f),
+            focusedContainerColor = color.copy(alpha = 0.2f)
         )
+    ) {
+        Row(
+            modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(icon, contentDescription = null, tint = color)
+            Spacer(modifier = Modifier.width(15.dp))
+            Text(label, color = Color.White)
+        }
     }
 }
 
 @Composable
 fun AdminPanel(viewModel: MainViewModel, onInteraction: () -> Unit) {
-    Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(end = 20.dp)) {
-        Text("PANEL DE CONTROL", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black)
-        Spacer(modifier = Modifier.height(20.dp))
+    Column(modifier = Modifier.fillMaxSize().padding(10.dp)) {
+        Text("PANEL DE CONTROL", style = MaterialTheme.typography.titleMedium, color = Color(0xFFFFD700), fontWeight = FontWeight.Bold)
+        Spacer(modifier = Modifier.height(10.dp))
+        Text("Gestionar usuarios y suscripciones (Simulado)", color = Color.White.copy(alpha = 0.6f), style = MaterialTheme.typography.bodySmall)
         
-        Text("Aquí puedes gestionar canales y usuarios si tienes los permisos necesarios.", color = Color.White.copy(alpha = 0.6f))
+        // Aquí iría la lista de usuarios para el admin
     }
 }
 
 @Composable
-fun LoginScreen(viewModel: MainViewModel) {
-    var username by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-    val isLoading = viewModel.isLoading
-    val errorMessage = viewModel.errorMessage
-
-    Box(modifier = Modifier.fillMaxSize()) {
-        AnimatedBackground()
-        
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Column(
-                modifier = Modifier
-                    .width(400.dp)
-                    .clip(RoundedCornerShape(28.dp))
-                    .background(Color.Black.copy(alpha = 0.7f))
-                    .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(28.dp))
-                    .padding(40.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text("ONYX TV", style = MaterialTheme.typography.displayMedium, color = Color.White, fontWeight = FontWeight.Black)
-                Text("Bienvenido de nuevo", color = Color.White.copy(alpha = 0.5f), modifier = Modifier.padding(bottom = 30.dp))
-
-                if (errorMessage != null) {
-                    Text(errorMessage!!, color = Color.Red, modifier = Modifier.padding(bottom = 15.dp), textAlign = TextAlign.Center)
-                }
-
-                OutlinedTextField(
-                    value = username,
-                    onValueChange = { username = it },
-                    label = { M3Text("Usuario") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Color(0xFF00B4D8), focusedLabelColor = Color(0xFF00B4D8), cursorColor = Color(0xFF00B4D8))
-                )
-
-                Spacer(modifier = Modifier.height(15.dp))
-
-                OutlinedTextField(
-                    value = password,
-                    onValueChange = { password = it },
-                    label = { M3Text("Contraseña") },
-                    modifier = Modifier.fillMaxWidth(),
-                    visualTransformation = PasswordVisualTransformation(),
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Color(0xFF00B4D8), focusedLabelColor = Color(0xFF00B4D8), cursorColor = Color(0xFF00B4D8))
-                )
-
-                Spacer(modifier = Modifier.height(30.dp))
-
-                Button(
-                    onClick = { viewModel.signIn(username, password) },
-                    modifier = Modifier.fillMaxWidth().height(56.dp),
-                    enabled = !isLoading,
-                    shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00B4D8))
-                ) {
-                    if (isLoading) CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
-                    else M3Text("INICIAR SESIÓN", fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-                }
-            }
-        }
-    }
+fun OnyxAppTheme(content: @Composable () -> Unit) {
+    MaterialTheme(
+        colorScheme = darkColorScheme(
+            primary = Color(0xFF00B4D8),
+            background = Color.Black,
+            surface = Color(0xFF121212)
+        ),
+        typography = Typography(),
+        content = content
+    )
 }
