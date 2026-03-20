@@ -3,6 +3,7 @@ package com.example.onyxapp
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.WindowManager
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -29,6 +30,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -37,11 +39,13 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import com.example.onyxapp.ui.components.*
 import com.example.onyxapp.ui.theme.OnyxAppTheme
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 class MainActivity : ComponentActivity() {
@@ -56,7 +60,18 @@ class MainActivity : ComponentActivity() {
                 if (showSplash) {
                     SplashScreen(onFinished = { showSplash = false })
                 } else {
-                    MainScreen(viewModel)
+                    // SISTEMA DE SEGURIDAD: Auth Guard
+                    when {
+                        !viewModel.isUserAuthenticated -> {
+                            LoginScreen(viewModel)
+                        }
+                        !viewModel.isUserAuthorized -> {
+                            UnauthorizedScreen(viewModel)
+                        }
+                        else -> {
+                            MainScreen(viewModel)
+                        }
+                    }
                 }
             }
         }
@@ -66,19 +81,33 @@ class MainActivity : ComponentActivity() {
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun MainScreen(viewModel: MainViewModel) {
+    val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val configuration = LocalConfiguration.current
     val isPortrait = configuration.orientation == android.content.res.Configuration.ORIENTATION_PORTRAIT
 
-    // Manejo del ciclo de vida para detener audio al salir (Home)
+    LaunchedEffect(viewModel.authError) {
+        viewModel.authError?.let {
+            Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+            viewModel.clearAuthError()
+        }
+    }
+
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_STOP) {
-                viewModel.stopPlayback()
-            } else if (event == Lifecycle.Event.ON_START) {
-                if (viewModel.currentChannelUrl.isNotEmpty()) {
-                    viewModel.playVideo(viewModel.currentChannelUrl, resetRetry = false)
+            when (event) {
+                Lifecycle.Event.ON_PAUSE -> {
+                    viewModel.stopPlayback()
                 }
+                Lifecycle.Event.ON_RESUME -> {
+                    if (viewModel.currentChannelUrl.isNotEmpty() && viewModel.isUserAuthorized) {
+                        viewModel.viewModelScope.launch {
+                            delay(500)
+                            viewModel.playVideo(viewModel.currentChannelUrl, resetRetry = false)
+                        }
+                    }
+                }
+                else -> {}
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -89,7 +118,6 @@ fun MainScreen(viewModel: MainViewModel) {
 
     var showMenu by remember { mutableStateOf(true) }
     var interactionKey by remember { mutableStateOf(Any()) }
-
     var isOpeningMenuByKey by remember { mutableStateOf(false) }
 
     val categories = remember(viewModel.isAdmin) {
@@ -216,7 +244,7 @@ fun MainScreen(viewModel: MainViewModel) {
                         .background(Brush.horizontalGradient(listOf(Color.Black.copy(alpha = 0.9f), Color.Transparent)))
                         .padding(start = 40.dp, top = 30.dp, bottom = 30.dp, end = 20.dp)
                 ) {
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
                         Column {
                             Text("ONYX TV", style = MaterialTheme.typography.displaySmall, color = Color.White, fontWeight = FontWeight.Black, letterSpacing = 2.sp)
                             Text(
@@ -226,7 +254,21 @@ fun MainScreen(viewModel: MainViewModel) {
                                 fontWeight = FontWeight.Bold
                             )
                         }
-                        Text(viewModel.currentTime, color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.headlineSmall)
+                        
+                        // RELOJ Y FECHA APILADOS (UTC-7)
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(
+                                text = viewModel.currentTime,
+                                color = Color.White.copy(alpha = 0.9f),
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = viewModel.currentDate,
+                                color = Color.White.copy(alpha = 0.6f),
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(25.dp))
@@ -250,15 +292,6 @@ fun MainScreen(viewModel: MainViewModel) {
                     }
 
                     Spacer(modifier = Modifier.height(30.dp))
-
-                    Text(
-                        text = if (selectedCategory == "LIVE") "CANALES EN VIVO" else selectedCategory,
-                        color = Color.White.copy(alpha = 0.4f),
-                        style = MaterialTheme.typography.labelLarge,
-                        modifier = Modifier.fillMaxWidth().padding(bottom = 15.dp),
-                        textAlign = TextAlign.Center,
-                        letterSpacing = 1.5.sp
-                    )
 
                     Box(modifier = Modifier.weight(1f)) {
                         when (selectedCategory) {

@@ -12,6 +12,8 @@ import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -25,7 +27,9 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Border
@@ -36,6 +40,8 @@ import com.example.onyxapp.MainViewModel
 import com.example.onyxapp.Channel
 import java.text.SimpleDateFormat
 import java.util.*
+import android.content.Intent
+import android.net.Uri
 
 @Composable
 fun AccountInfoCard(viewModel: MainViewModel) {
@@ -50,9 +56,9 @@ fun AccountInfoCard(viewModel: MainViewModel) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             val imageVector = if (viewModel.isAdmin) Icons.Default.Shield else Icons.Default.AccountCircle
             Icon(
-                imageVector = imageVector, 
-                contentDescription = null, 
-                tint = if (viewModel.isAdmin) Color(0xFFFFD700) else Color(0xFF00B4D8), 
+                imageVector = imageVector,
+                contentDescription = null,
+                tint = if (viewModel.isAdmin) Color(0xFFFFD700) else Color(0xFF00B4D8),
                 modifier = Modifier.size(32.dp)
             )
             Spacer(modifier = Modifier.width(15.dp))
@@ -68,13 +74,97 @@ fun AccountInfoCard(viewModel: MainViewModel) {
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun SettingsPanel(viewModel: MainViewModel, onInteraction: () -> Unit) {
+    var showPassDialog by remember { mutableStateOf(false) }
+    var showInfoDialog by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+
     Column(modifier = Modifier.fillMaxSize().padding(10.dp), verticalArrangement = Arrangement.spacedBy(15.dp)) {
         Text("CONFIGURACIÓN", style = MaterialTheme.typography.titleMedium, color = Color.White, fontWeight = FontWeight.Bold)
-        
+
+        SettingButton("Contacto y Soporte", Icons.Default.Info, Color(0xFF00B4D8)) {
+            showInfoDialog = true
+            onInteraction()
+        }
+
+        SettingButton("Cambiar mi Contraseña", Icons.Default.Lock, Color(0xFF00B4D8)) {
+            showPassDialog = true
+            onInteraction()
+        }
+
         SettingButton("Cerrar Sesión", Icons.AutoMirrored.Filled.ExitToApp, Color.Red) {
             viewModel.logout()
             onInteraction()
         }
+    }
+
+    if (showInfoDialog) {
+        AlertDialog(
+            onDismissRequest = { showInfoDialog = false },
+            title = { 
+                Text("SOPORTE ONYX TV", color = Color(0xFF00B4D8), fontWeight = FontWeight.Black) 
+            },
+            text = {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        "Para renovaciones, problemas técnicos o compra de cuentas premium, puedes contactar directamente al administrador.",
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        color = Color.White.copy(alpha = 0.8f)
+                    )
+                    Spacer(Modifier.height(20.dp))
+                    Text(
+                        "Instagram: @carlosnvz__",
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        fontSize = 18.sp
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { 
+                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://instagram.com/carlosnvz__"))
+                        context.startActivity(intent)
+                        showInfoDialog = false 
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE1306C))
+                ) {
+                    Text("Abrir Instagram")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showInfoDialog = false }) { Text("Cerrar") }
+            },
+            containerColor = Color(0xFF1A1A1A),
+            textContentColor = Color.White
+        )
+    }
+
+    if (showPassDialog) {
+        var newPassword by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { showPassDialog = false },
+            title = { Text("Nueva Contraseña") },
+            text = {
+                TextField(
+                    value = newPassword,
+                    onValueChange = { newPassword = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Escribe tu nueva clave") },
+                    visualTransformation = PasswordVisualTransformation()
+                )
+            },
+            confirmButton = {
+                Button(onClick = {
+                    if (newPassword.isNotEmpty()) {
+                        viewModel.updateOwnPassword(newPassword)
+                        showPassDialog = false
+                    }
+                }) { Text("Actualizar") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPassDialog = false }) { Text("Cancelar") }
+            }
+        )
     }
 }
 
@@ -106,9 +196,11 @@ fun SettingButton(label: String, icon: ImageVector, color: Color, onClick: () ->
 fun AdminPanel(viewModel: MainViewModel, onInteraction: () -> Unit) {
     var adminTab by remember { mutableStateOf("CANALES") }
     var editingChannel by remember { mutableStateOf<Channel?>(null) }
+    var editingUser by remember { mutableStateOf<Map<String, Any>?>(null) }
     var showAddDialog by remember { mutableStateOf(false) }
+    var showUserAddDialog by remember { mutableStateOf(false) }
     var adminSearchQuery by remember { mutableStateOf("") }
-    
+
     var isSearchActive by remember { mutableStateOf(false) }
     val searchFocusRequester = remember { FocusRequester() }
     val addButtonFocusRequester = remember { FocusRequester() }
@@ -117,16 +209,15 @@ fun AdminPanel(viewModel: MainViewModel, onInteraction: () -> Unit) {
         viewModel.fetchAllUsers()
     }
 
-    Column(modifier = Modifier.fillMaxSize()) { 
-        // Selector de Pestañas
+    Column(modifier = Modifier.fillMaxSize()) {
         Row(modifier = Modifier.padding(bottom = 15.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            TabButton("CANALES", adminTab == "CANALES") { 
+            TabButton("CANALES", adminTab == "CANALES") {
                 adminTab = "CANALES"
                 adminSearchQuery = ""
                 isSearchActive = false
                 onInteraction()
             }
-            TabButton("USUARIOS", adminTab == "USUARIOS") { 
+            TabButton("USUARIOS", adminTab == "USUARIOS") {
                 adminTab = "USUARIOS"
                 adminSearchQuery = ""
                 isSearchActive = false
@@ -134,7 +225,6 @@ fun AdminPanel(viewModel: MainViewModel, onInteraction: () -> Unit) {
             }
         }
 
-        // Barra de Búsqueda
         Box(modifier = Modifier.fillMaxWidth().padding(bottom = 15.dp)) {
             if (!isSearchActive && adminSearchQuery.isEmpty()) {
                 Surface(
@@ -161,17 +251,17 @@ fun AdminPanel(viewModel: MainViewModel, onInteraction: () -> Unit) {
             } else {
                 TextField(
                     value = adminSearchQuery,
-                    onValueChange = { 
+                    onValueChange = {
                         adminSearchQuery = it
-                        onInteraction() 
+                        onInteraction()
                     },
                     placeholder = { Text("Buscar...", color = Color.White.copy(alpha = 0.4f), fontSize = 14.sp) },
                     modifier = Modifier
                         .fillMaxWidth()
                         .focusRequester(searchFocusRequester)
-                        .onFocusChanged { 
+                        .onFocusChanged {
                             if (it.isFocused) onInteraction()
-                            if (!it.isFocused && adminSearchQuery.isEmpty()) isSearchActive = false 
+                            if (!it.isFocused && adminSearchQuery.isEmpty()) isSearchActive = false
                         },
                     shape = RoundedCornerShape(12.dp),
                     singleLine = true,
@@ -185,7 +275,7 @@ fun AdminPanel(viewModel: MainViewModel, onInteraction: () -> Unit) {
                     ),
                     leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = Color(0xFFFFD700)) },
                     trailingIcon = {
-                        IconButton(onClick = { 
+                        IconButton(onClick = {
                             adminSearchQuery = ""
                             isSearchActive = false
                             onInteraction()
@@ -194,7 +284,7 @@ fun AdminPanel(viewModel: MainViewModel, onInteraction: () -> Unit) {
                         }
                     }
                 )
-                
+
                 LaunchedEffect(isSearchActive) {
                     if (isSearchActive) searchFocusRequester.requestFocus()
                 }
@@ -207,7 +297,22 @@ fun AdminPanel(viewModel: MainViewModel, onInteraction: () -> Unit) {
                 val uid = it["uid"] as? String ?: ""
                 username.contains(adminSearchQuery, ignoreCase = true) || uid.contains(adminSearchQuery, ignoreCase = true)
             }
-            UserManagementList(viewModel, filteredUsers, onInteraction)
+            Box(Modifier.fillMaxSize()) {
+                UserManagementList(viewModel, filteredUsers, onEdit = { editingUser = it }, onInteraction = onInteraction)
+
+                Box(Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.BottomEnd) {
+                    Surface(
+                        onClick = { showUserAddDialog = true; onInteraction() },
+                        modifier = Modifier.size(50.dp),
+                        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(12.dp)),
+                        colors = ClickableSurfaceDefaults.colors(containerColor = Color(0xFF00B4D8))
+                    ) {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Icon(Icons.Default.PersonAdd, contentDescription = null, tint = Color.White)
+                        }
+                    }
+                }
+            }
         } else {
             val filteredChannels = viewModel.allChannels.filter {
                 it.name.contains(adminSearchQuery, ignoreCase = true) || it.group?.contains(adminSearchQuery, ignoreCase = true) == true
@@ -215,12 +320,12 @@ fun AdminPanel(viewModel: MainViewModel, onInteraction: () -> Unit) {
             Box(Modifier.fillMaxSize()) {
                 ChannelManagementList(
                     channels = filteredChannels,
-                    viewModel = viewModel, 
-                    onEdit = { editingChannel = it; onInteraction() }, 
+                    viewModel = viewModel,
+                    onEdit = { editingChannel = it; onInteraction() },
                     onInteraction = onInteraction,
                     addButtonFocusRequester = addButtonFocusRequester
                 )
-                
+
                 Box(Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.BottomEnd) {
                     Surface(
                         onClick = { showAddDialog = true; onInteraction() },
@@ -242,17 +347,9 @@ fun AdminPanel(viewModel: MainViewModel, onInteraction: () -> Unit) {
             var tempUrl by remember { mutableStateOf(editingChannel?.url ?: "") }
             AlertDialog(
                 onDismissRequest = { editingChannel = null },
-                title = { Text("Editar Canal: ${editingChannel?.name}") },
+                title = { Text("Editar Canal") },
                 text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text("Actualiza la URL si el canal está caído:", fontSize = 12.sp)
-                        TextField(
-                            value = tempUrl,
-                            onValueChange = { tempUrl = it; onInteraction() },
-                            modifier = Modifier.fillMaxWidth(),
-                            textStyle = MaterialTheme.typography.bodySmall
-                        )
-                    }
+                    TextField(value = tempUrl, onValueChange = { tempUrl = it; onInteraction() }, modifier = Modifier.fillMaxWidth())
                 },
                 confirmButton = {
                     Button(onClick = {
@@ -260,9 +357,73 @@ fun AdminPanel(viewModel: MainViewModel, onInteraction: () -> Unit) {
                         editingChannel = null
                         onInteraction()
                     }) { Text("Guardar") }
+                }
+            )
+        }
+
+        if (editingUser != null) {
+            var username by remember { mutableStateOf(editingUser!!["username"] as? String ?: "") }
+            var role by remember { mutableStateOf(editingUser!!["role"] as? String ?: "USER") }
+            val uid = editingUser!!["uid"] as String
+
+            AlertDialog(
+                onDismissRequest = { editingUser = null },
+                title = { Text("Gestionar Usuario") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        TextField(value = username, onValueChange = { username = it }, label = { Text("Nombre") })
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Rol: ")
+                            TabButton("USER", role == "USER") { role = "USER" }
+                            Spacer(Modifier.width(5.dp))
+                            TabButton("ADMIN", role == "ADMIN") { role = "ADMIN" }
+                        }
+                        Button(
+                            onClick = {
+                                val newExpiry = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, 30) }.time
+                                viewModel.updateUserDetails(uid, mapOf("expiryDate" to com.google.firebase.Timestamp(newExpiry)))
+                                onInteraction()
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00B4D8))
+                        ) {
+                            Text("Renovar +30 Días")
+                        }
+                    }
+                },
+                confirmButton = {
+                    Button(onClick = {
+                        viewModel.updateUserDetails(uid, mapOf("username" to username, "role" to role))
+                        editingUser = null
+                        onInteraction()
+                    }) { Text("Guardar Cambios") }
                 },
                 dismissButton = {
-                    TextButton(onClick = { editingChannel = null; onInteraction() }) { Text("Cancelar") }
+                    TextButton(onClick = { editingUser = null }) { Text("Cerrar") }
+                }
+            )
+        }
+
+        if (showUserAddDialog) {
+            var userEmail by remember { mutableStateOf("") }
+            var userPass by remember { mutableStateOf("") }
+
+            AlertDialog(
+                onDismissRequest = { showUserAddDialog = false },
+                title = { Text("Crear Nuevo Usuario") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextField(value = userEmail, onValueChange = { userEmail = it }, label = { Text("Username") })
+                        TextField(value = userPass, onValueChange = { userPass = it }, label = { Text("Password") }, visualTransformation = PasswordVisualTransformation())
+                        Text("Nota: Se creará como @onyxtv.app", fontSize = 10.sp, color = Color.Gray)
+                    }
+                },
+                confirmButton = {
+                    Button(onClick = {
+                        viewModel.createManualUser(userEmail, userPass)
+                        showUserAddDialog = false
+                        onInteraction()
+                    }) { Text("Crear") }
                 }
             )
         }
@@ -290,9 +451,6 @@ fun AdminPanel(viewModel: MainViewModel, onInteraction: () -> Unit) {
                         showAddDialog = false
                         onInteraction()
                     }) { Text("Agregar") }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showAddDialog = false; onInteraction() }) { Text("Cancelar") }
                 }
             )
         }
@@ -304,14 +462,14 @@ fun AdminPanel(viewModel: MainViewModel, onInteraction: () -> Unit) {
 fun TabButton(label: String, isSelected: Boolean, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
-        modifier = Modifier.height(35.dp).widthIn(min = 100.dp),
+        modifier = Modifier.height(35.dp).widthIn(min = 80.dp),
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(50)),
         colors = ClickableSurfaceDefaults.colors(
             containerColor = if (isSelected) Color(0xFFFFD700) else Color.White.copy(alpha = 0.1f)
         )
     ) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text(label, color = if (isSelected) Color.Black else Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            Text(label, color = if (isSelected) Color.Black else Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -320,15 +478,15 @@ fun TabButton(label: String, isSelected: Boolean, onClick: () -> Unit) {
 @Composable
 fun ChannelManagementList(
     channels: List<Channel>,
-    viewModel: MainViewModel, 
-    onEdit: (Channel) -> Unit, 
+    viewModel: MainViewModel,
+    onEdit: (Channel) -> Unit,
     onInteraction: () -> Unit,
     addButtonFocusRequester: FocusRequester
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(10.dp),
-        contentPadding = PaddingValues(bottom = 80.dp) 
+        contentPadding = PaddingValues(bottom = 80.dp)
     ) {
         items(channels) { channel ->
             Row(
@@ -403,39 +561,68 @@ fun ChannelManagementList(
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun UserManagementList(
-    viewModel: MainViewModel, 
+    viewModel: MainViewModel,
     users: List<Map<String, Any>>,
+    onEdit: (Map<String, Any>) -> Unit,
     onInteraction: () -> Unit
 ) {
     LazyColumn(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         items(users) { user ->
             val uid = user["uid"] as? String ?: ""
             val username = user["username"] as? String ?: "Desconocido"
+            val role = user["role"] as? String ?: "USER"
             val isActive = when(val active = user["isActive"]) {
                 is Boolean -> active
                 is String -> active.toBoolean()
                 else -> false
             }
-            
-            Surface(
-                onClick = { viewModel.toggleUserStatus(uid, isActive); onInteraction() },
-                modifier = Modifier.fillMaxWidth().onFocusChanged { if (it.isFocused) onInteraction() },
-                shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
-                colors = ClickableSurfaceDefaults.colors(
-                    containerColor = if (isActive) Color.White.copy(alpha = 0.05f) else Color.Red.copy(alpha = 0.1f)
-                )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Row(modifier = Modifier.padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Column {
-                        Text(username.uppercase(), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                        Text("ID: $uid", color = Color.White.copy(alpha = 0.4f), fontSize = 10.sp)
-                    }
-                    Text(
-                        text = if (isActive) "ACTIVO" else "BLOQUEADO", 
-                        color = if (isActive) Color.Green else Color.Red, 
-                        fontWeight = FontWeight.Black, 
-                        fontSize = 12.sp
+                Surface(
+                    onClick = { viewModel.toggleUserStatus(uid, isActive); onInteraction() },
+                    modifier = Modifier.weight(1f).onFocusChanged { if (it.isFocused) onInteraction() },
+                    shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+                    colors = ClickableSurfaceDefaults.colors(
+                        containerColor = if (isActive) Color.White.copy(alpha = 0.05f) else Color.Red.copy(alpha = 0.1f)
                     )
+                ) {
+                    Row(modifier = Modifier.padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (role == "ADMIN") Icon(Icons.Default.Shield, null, tint = Color(0xFFFFD700), modifier = Modifier.size(14.dp))
+                            Spacer(Modifier.width(5.dp))
+                            Column {
+                                Text(username.uppercase(), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                val exp = user["expiryDate"] as? com.google.firebase.Timestamp
+                                val expStr = exp?.toDate()?.let { SimpleDateFormat("dd/MM/yy", Locale.getDefault()).format(it) } ?: "N/A"
+                                Text("Expira: $expStr", color = Color.White.copy(alpha = 0.4f), fontSize = 10.sp)
+                            }
+                        }
+                        Text(
+                            text = if (isActive) "ACTIVO" else "BLOQUEADO",
+                            color = if (isActive) Color.Green else Color.Red,
+                            fontWeight = FontWeight.Black,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+
+                Surface(
+                    onClick = { onEdit(user); onInteraction() },
+                    modifier = Modifier.size(48.dp).onFocusChanged { if (it.isFocused) onInteraction() },
+                    shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+                    colors = ClickableSurfaceDefaults.colors(
+                        containerColor = Color.White.copy(alpha = 0.05f),
+                        focusedContainerColor = Color(0xFFFFD700).copy(alpha = 0.2f)
+                    ),
+                    border = ClickableSurfaceDefaults.border(focusedBorder = Border(BorderStroke(2.dp, Color(0xFFFFD700))))
+                ) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.Edit, "Editar", tint = Color(0xFFFFD700), modifier = Modifier.size(20.dp))
+                    }
                 }
             }
         }

@@ -173,6 +173,12 @@ fun VideoPlayer(mediaPlayer: MediaPlayer, modifier: Modifier) {
                 mediaPlayer.attachViews(this, null, true, false)
             }
         },
+        update = { vlcLayout ->
+            if (!mediaPlayer.vlcVout.areViewsAttached()) {
+                mediaPlayer.detachViews()
+                mediaPlayer.attachViews(vlcLayout, null, true, false)
+            }
+        },
         modifier = modifier
     )
 }

@@ -15,7 +15,7 @@ android {
         versionCode = 2
         versionName = "1.1"
 
-        // Soporte para TVs reales y Emuladores
+        // Soporte para TVs reales y Emuladores en un solo APK
         ndk {
             abiFilters.addAll(listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64"))
         }
@@ -32,14 +32,10 @@ android {
         }
     }
     
-    // Genera APKs separados: uno para TV (ARM) y otro para Emulador (x86)
-    // El APK de TV será mucho más ligero
+    // Desactivamos splits para generar un único APK universal
     splits {
         abi {
-            isEnable = true
-            reset()
-            include("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
-            isUniversalApk = true 
+            isEnable = false
         }
     }
 
