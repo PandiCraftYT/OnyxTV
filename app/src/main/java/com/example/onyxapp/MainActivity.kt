@@ -1,7 +1,8 @@
 package com.example.onyxapp
 
-import android.app.Activity
 import android.os.Bundle
+import android.view.KeyEvent
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -10,17 +11,12 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -31,36 +27,37 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.tv.material3.Border
-import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
-import androidx.tv.material3.Surface
-import coil.compose.AsyncImage
+import com.example.onyxapp.ui.components.*
+import com.example.onyxapp.ui.theme.OnyxAppTheme
 import kotlinx.coroutines.delay
-import org.videolan.libvlc.MediaPlayer
-import org.videolan.libvlc.util.VLCVideoLayout
-import java.text.SimpleDateFormat
-import java.util.*
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         setContent {
             val viewModel: MainViewModel = viewModel()
+            var showSplash by remember { mutableStateOf(true) }
+
             OnyxAppTheme {
-                MainScreen(viewModel)
+                if (showSplash) {
+                    SplashScreen(onFinished = { showSplash = false })
+                } else {
+                    MainScreen(viewModel)
+                }
             }
         }
     }
@@ -69,12 +66,31 @@ class MainActivity : ComponentActivity() {
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun MainScreen(viewModel: MainViewModel) {
-    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val configuration = LocalConfiguration.current
     val isPortrait = configuration.orientation == android.content.res.Configuration.ORIENTATION_PORTRAIT
 
+    // Manejo del ciclo de vida para detener audio al salir (Home)
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) {
+                viewModel.stopPlayback()
+            } else if (event == Lifecycle.Event.ON_START) {
+                if (viewModel.currentChannelUrl.isNotEmpty()) {
+                    viewModel.playVideo(viewModel.currentChannelUrl, resetRetry = false)
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
     var showMenu by remember { mutableStateOf(true) }
-    val lastInteractionTrigger = remember { mutableLongStateOf(System.currentTimeMillis()) }
+    var interactionKey by remember { mutableStateOf(Any()) }
+
+    var isOpeningMenuByKey by remember { mutableStateOf(false) }
 
     val categories = remember(viewModel.isAdmin) {
         if (viewModel.isAdmin) listOf("LIVE", "ADMIN", "AJUSTES") else listOf("LIVE", "AJUSTES")
@@ -82,63 +98,130 @@ fun MainScreen(viewModel: MainViewModel) {
 
     var selectedCategory by remember { mutableStateOf("LIVE") }
     val initialFocusRequester = remember { FocusRequester() }
+    val listState = rememberLazyListState()
+
+    val resetTimer = { interactionKey = Any() }
 
     LaunchedEffect(showMenu) {
         if (showMenu) {
             delay(200)
+            if (selectedCategory == "LIVE" && viewModel.currentChannelUrl.isNotEmpty()) {
+                val index = viewModel.filteredChannels.indexOfFirst { it.url == viewModel.currentChannelUrl }
+                if (index >= 0) listState.scrollToItem(index)
+            }
             initialFocusRequester.requestFocus()
         }
     }
 
-    LaunchedEffect(showMenu, lastInteractionTrigger.longValue) {
+    LaunchedEffect(showMenu, interactionKey) {
         if (showMenu && !isPortrait) {
             delay(15000)
             showMenu = false
         }
     }
 
-    BackHandler { if (showMenu) showMenu = false else (context as? Activity)?.finishAffinity() }
+    BackHandler(enabled = showMenu) {
+        showMenu = false
+    }
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        // Usamos la implementación de AnimatedBackground.kt
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .onPreviewKeyEvent { event ->
+                if (event.type == KeyEventType.KeyDown) resetTimer()
+
+                val isCenterKey = event.nativeKeyEvent.keyCode in listOf(
+                    KeyEvent.KEYCODE_DPAD_CENTER,
+                    KeyEvent.KEYCODE_ENTER,
+                    KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE
+                )
+
+                if (isCenterKey) {
+                    if (event.type == KeyEventType.KeyDown) {
+                        if (!showMenu) {
+                            showMenu = true
+                            isOpeningMenuByKey = true
+                            true
+                        } else if (isOpeningMenuByKey) {
+                            true
+                        } else {
+                            false
+                        }
+                    } else { 
+                        if (isOpeningMenuByKey) {
+                            isOpeningMenuByKey = false
+                            true
+                        } else {
+                            false
+                        }
+                    }
+                } else if (!showMenu && event.type == KeyEventType.KeyDown) {
+                    when (event.nativeKeyEvent.keyCode) {
+                        KeyEvent.KEYCODE_DPAD_UP -> { viewModel.zapPrevious(); true }
+                        KeyEvent.KEYCODE_DPAD_DOWN -> { viewModel.zapNext(); true }
+                        else -> false
+                    }
+                } else false
+            }
+    ) {
         AnimatedBackground()
 
-        // 1. REPRODUCTOR DE VIDEO
-        viewModel.mediaPlayer?.let { player ->
-            val videoModifier = if (showMenu && !isPortrait) {
-                Modifier
-                    .padding(top = 100.dp, end = 40.dp)
-                    .align(Alignment.TopEnd)
-                    .fillMaxWidth(0.55f)
-                    .aspectRatio(viewModel.videoAspectRatio)
-                    .clip(RoundedCornerShape(24.dp))
-                    .border(BorderStroke(2.dp, Color.White.copy(alpha = 0.15f)), RoundedCornerShape(24.dp))
-                    .clickable { showMenu = false }
-            } else {
-                Modifier.fillMaxSize().clickable { showMenu = true }
+        Box(modifier = Modifier.fillMaxSize()) {
+            viewModel.mediaPlayer?.let { player ->
+                val videoModifier = if (showMenu && !isPortrait) {
+                    Modifier
+                        .padding(top = 100.dp, end = 40.dp)
+                        .align(Alignment.TopEnd)
+                        .fillMaxWidth(if (selectedCategory == "ADMIN") 0.25f else 0.55f)
+                        .aspectRatio(viewModel.videoAspectRatio)
+                        .clip(RoundedCornerShape(24.dp))
+                        .border(BorderStroke(2.dp, Color.White.copy(alpha = 0.15f)), RoundedCornerShape(24.dp))
+                        .clickable { if (!isOpeningMenuByKey) showMenu = false }
+                } else {
+                    Modifier.fillMaxSize().clickable { showMenu = true }
+                }
+                VideoPlayer(player, videoModifier)
             }
-            VideoPlayer(player, videoModifier)
+
+            if (viewModel.isLoading || viewModel.errorMessage != null) {
+                Box(
+                    modifier = Modifier.matchParentSize().background(Color.Black.copy(alpha = 0.4f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        if (viewModel.isLoading) {
+                            CircularProgressIndicator(color = Color(0xFF00B4D8))
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text("Cargando...", color = Color.White)
+                        }
+                        viewModel.errorMessage?.let {
+                            Text(it, color = Color.Red, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                        }
+                    }
+                }
+            }
         }
 
-        // 2. CAPA DE INTERFAZ (Layout de dos columnas para NO obstruir)
-        AnimatedVisibility(visible = showMenu, enter = fadeIn() + expandHorizontally(), exit = fadeOut() + shrinkHorizontally()) {
+        AnimatedVisibility(
+            visible = showMenu,
+            enter = fadeIn() + expandHorizontally(),
+            exit = fadeOut() + shrinkHorizontally()
+        ) {
             Row(modifier = Modifier.fillMaxSize()) {
-                
-                // COLUMNA IZQUIERDA: MENÚ (42% de la pantalla)
+                val columnWeight = if (selectedCategory == "ADMIN") 0.70f else 0.42f
                 Column(
                     modifier = Modifier
-                        .weight(0.42f)
+                        .weight(columnWeight)
                         .fillMaxHeight()
                         .background(Brush.horizontalGradient(listOf(Color.Black.copy(alpha = 0.9f), Color.Transparent)))
                         .padding(start = 40.dp, top = 30.dp, bottom = 30.dp, end = 20.dp)
                 ) {
-                    // TÍTULO Y RELOJ
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                         Column {
                             Text("ONYX TV", style = MaterialTheme.typography.displaySmall, color = Color.White, fontWeight = FontWeight.Black, letterSpacing = 2.sp)
                             Text(
-                                text = if (viewModel.isAdmin) "MODO ADMINISTRADOR" else "Premium Access", 
-                                style = MaterialTheme.typography.labelMedium, 
+                                text = if (viewModel.isAdmin) "MODO ADMINISTRADOR" else "Premium Access",
+                                style = MaterialTheme.typography.labelMedium,
                                 color = if (viewModel.isAdmin) Color(0xFFFFD700) else Color(0xFF00B4D8),
                                 fontWeight = FontWeight.Bold
                             )
@@ -148,7 +231,6 @@ fun MainScreen(viewModel: MainViewModel) {
 
                     Spacer(modifier = Modifier.height(25.dp))
 
-                    // CATEGORÍAS - Centradas y con padding vertical para evitar cortes
                     LazyRow(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(15.dp, Alignment.CenterHorizontally),
@@ -162,7 +244,7 @@ fun MainScreen(viewModel: MainViewModel) {
                                 modifier = if (cat == selectedCategory) Modifier.focusRequester(initialFocusRequester) else Modifier
                             ) {
                                 selectedCategory = cat
-                                lastInteractionTrigger.longValue = System.currentTimeMillis()
+                                resetTimer()
                             }
                         }
                     }
@@ -170,9 +252,9 @@ fun MainScreen(viewModel: MainViewModel) {
                     Spacer(modifier = Modifier.height(30.dp))
 
                     Text(
-                        text = if (selectedCategory == "LIVE") "CANALES EN VIVO" else selectedCategory, 
-                        color = Color.White.copy(alpha = 0.4f), 
-                        style = MaterialTheme.typography.labelLarge, 
+                        text = if (selectedCategory == "LIVE") "CANALES EN VIVO" else selectedCategory,
+                        color = Color.White.copy(alpha = 0.4f),
+                        style = MaterialTheme.typography.labelLarge,
                         modifier = Modifier.fillMaxWidth().padding(bottom = 15.dp),
                         textAlign = TextAlign.Center,
                         letterSpacing = 1.5.sp
@@ -180,10 +262,9 @@ fun MainScreen(viewModel: MainViewModel) {
 
                     Box(modifier = Modifier.weight(1f)) {
                         when (selectedCategory) {
-                            "AJUSTES" -> SettingsPanel(viewModel) { lastInteractionTrigger.longValue = System.currentTimeMillis() }
-                            "ADMIN" -> AdminPanel(viewModel) { lastInteractionTrigger.longValue = System.currentTimeMillis() }
+                            "AJUSTES" -> SettingsPanel(viewModel) { resetTimer() }
+                            "ADMIN" -> AdminPanel(viewModel) { resetTimer() }
                             else -> {
-                                val listState = rememberLazyListState()
                                 LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxSize()) {
                                     itemsIndexed(viewModel.filteredChannels) { index, channel ->
                                         val isFav = viewModel.favorites.any { it.url == channel.url }
@@ -193,9 +274,10 @@ fun MainScreen(viewModel: MainViewModel) {
                                             isFavorite = isFav,
                                             onClick = {
                                                 if (viewModel.currentChannelUrl == channel.url) showMenu = false else viewModel.playVideo(channel.url)
-                                                lastInteractionTrigger.longValue = System.currentTimeMillis()
+                                                resetTimer()
                                             },
-                                            onFocus = { lastInteractionTrigger.longValue = System.currentTimeMillis() },
+                                            onFocus = { resetTimer() },
+                                            onLeft = { initialFocusRequester.requestFocus() },
                                             onRight = { showMenu = false }
                                         )
                                     }
@@ -209,13 +291,12 @@ fun MainScreen(viewModel: MainViewModel) {
                     }
                 }
 
-                // COLUMNA DERECHA: INFO CANAL (Bajada para no obstruir el video)
                 Column(
                     modifier = Modifier
-                        .weight(0.58f)
+                        .weight(1f - columnWeight)
                         .fillMaxHeight()
                         .padding(bottom = 60.dp, end = 50.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally, 
+                    horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Bottom
                 ) {
                     if (selectedCategory == "LIVE") {
@@ -240,256 +321,4 @@ fun MainScreen(viewModel: MainViewModel) {
             }
         }
     }
-}
-
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-fun ChannelListItem(
-    number: Int,
-    channel: Channel,
-    isSelected: Boolean,
-    isFavorite: Boolean,
-    onClick: () -> Unit,
-    onFocus: () -> Unit,
-    onRight: () -> Unit
-) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val isFocused by interactionSource.collectIsFocusedAsState()
-
-    LaunchedEffect(isFocused) { if (isFocused) onFocus() }
-
-    Surface(
-        onClick = onClick,
-        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.05f),
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(75.dp),
-        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(16.dp)),
-        colors = ClickableSurfaceDefaults.colors(
-            containerColor = if (isSelected) Color(0xFF00B4D8).copy(alpha = 0.2f) else Color.White.copy(alpha = 0.05f),
-            focusedContainerColor = Color.White.copy(alpha = 0.2f)
-        ),
-        border = ClickableSurfaceDefaults.border(
-            focusedBorder = Border(BorderStroke(2.dp, if (isSelected) Color(0xFF00B4D8) else Color.White))
-        ),
-        interactionSource = interactionSource
-    ) {
-        Row(
-            modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = String.format("%03d", number),
-                style = MaterialTheme.typography.titleLarge,
-                color = if (isFocused || isSelected) Color(0xFF00B4D8) else Color.White.copy(alpha = 0.3f),
-                fontWeight = FontWeight.Bold
-            )
-            
-            Spacer(modifier = Modifier.width(20.dp))
-            
-            Box(
-                modifier = Modifier
-                    .size(50.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Color.White.copy(alpha = 0.1f))
-            ) {
-                AsyncImage(
-                    model = channel.logo,
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Fit
-                )
-            }
-
-            Spacer(modifier = Modifier.width(20.dp))
-            
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = channel.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = channel.group ?: "General",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.5f)
-                )
-            }
-
-            if (isFavorite) {
-                Icon(Icons.Default.Favorite, contentDescription = null, tint = Color.Red, modifier = Modifier.size(20.dp))
-            }
-            
-            if (isFocused) {
-                Icon(Icons.Default.ChevronRight, contentDescription = null, tint = Color.White.copy(alpha = 0.5f))
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-fun CategoryTab(name: String, isSelected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val isFocused by interactionSource.collectIsFocusedAsState()
-
-    Surface(
-        onClick = onClick,
-        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.1f),
-        modifier = modifier.height(48.dp).widthIn(min = 100.dp),
-        shape = ClickableSurfaceDefaults.shape(CircleShape),
-        colors = ClickableSurfaceDefaults.colors(
-            containerColor = if (isSelected) Color(0xFF00B4D8) else Color.White.copy(alpha = 0.1f),
-            focusedContainerColor = if (isSelected) Color(0xFF00B4D8) else Color.White.copy(alpha = 0.2f)
-        ),
-        border = ClickableSurfaceDefaults.border(focusedBorder = Border(BorderStroke(2.dp, Color.White))),
-        interactionSource = interactionSource
-    ) {
-        Box(modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp), contentAlignment = Alignment.Center) {
-            Text(
-                text = name, 
-                color = Color.White,
-                style = MaterialTheme.typography.labelLarge, 
-                fontWeight = FontWeight.ExtraBold,
-                textAlign = TextAlign.Center,
-                maxLines = 1
-            )
-        }
-    }
-}
-
-@Composable
-fun VideoPlayer(mediaPlayer: MediaPlayer, modifier: Modifier) {
-    AndroidView(
-        factory = { context ->
-            VLCVideoLayout(context).apply {
-                mediaPlayer.detachViews()
-                mediaPlayer.attachViews(this, null, true, false)
-            }
-        },
-        modifier = modifier
-    )
-}
-
-@Composable
-fun AccountInfoCard(viewModel: MainViewModel) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
-            .background(if (viewModel.isAdmin) Color(0xFFFFD700).copy(alpha = 0.2f) else Color(0xFF00B4D8).copy(alpha = 0.1f))
-            .border(1.dp, if (viewModel.isAdmin) Color(0xFFFFD700).copy(alpha = 0.3f) else Color(0xFF00B4D8).copy(alpha = 0.2f), RoundedCornerShape(20.dp))
-            .padding(15.dp)
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            val imageVector = if (viewModel.isAdmin) Icons.Default.Shield else Icons.Default.AccountCircle
-            Icon(
-                imageVector = imageVector, 
-                contentDescription = null, 
-                tint = if (viewModel.isAdmin) Color(0xFFFFD700) else Color(0xFF00B4D8), 
-                modifier = Modifier.size(32.dp)
-            )
-            Spacer(modifier = Modifier.width(15.dp))
-            Column {
-                Text(viewModel.currentUsername.uppercase(), style = MaterialTheme.typography.titleSmall, color = Color.White, fontWeight = FontWeight.Black)
-                val expiryStr = viewModel.userExpiryDate?.let { SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(it) } ?: "N/A"
-                Text("Expira: $expiryStr", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.6f))
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-fun SettingsPanel(viewModel: MainViewModel, onInteraction: () -> Unit) {
-    Column(modifier = Modifier.fillMaxSize().padding(10.dp), verticalArrangement = Arrangement.spacedBy(15.dp)) {
-        Text("CONFIGURACIÓN", style = MaterialTheme.typography.titleMedium, color = Color.White, fontWeight = FontWeight.Bold)
-        
-        SettingToggle("Modo Administrador", viewModel.isAdmin) { 
-            viewModel.isAdmin = it
-            onInteraction()
-        }
-        
-        SettingButton("Cerrar Sesión", Icons.Default.ExitToApp, Color.Red) {
-            viewModel.logout()
-            onInteraction()
-        }
-    }
-}
-
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-fun SettingToggle(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val isFocused by interactionSource.collectIsFocusedAsState()
-
-    Surface(
-        onClick = { onCheckedChange(!checked) },
-        modifier = Modifier.fillMaxWidth().height(60.dp),
-        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(12.dp)),
-        colors = ClickableSurfaceDefaults.colors(
-            containerColor = Color.White.copy(alpha = 0.05f),
-            focusedContainerColor = Color.White.copy(alpha = 0.15f)
-        ),
-        interactionSource = interactionSource
-    ) {
-        Row(
-            modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text(label, color = Color.White)
-            Switch(checked = checked, onCheckedChange = null, colors = SwitchDefaults.colors(checkedThumbColor = Color(0xFF00B4D8)))
-        }
-    }
-}
-
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-fun SettingButton(label: String, icon: ImageVector, color: Color, onClick: () -> Unit) {
-    Surface(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth().height(60.dp),
-        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(12.dp)),
-        colors = ClickableSurfaceDefaults.colors(
-            containerColor = Color.White.copy(alpha = 0.05f),
-            focusedContainerColor = color.copy(alpha = 0.2f)
-        )
-    ) {
-        Row(
-            modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(icon, contentDescription = null, tint = color)
-            Spacer(modifier = Modifier.width(15.dp))
-            Text(label, color = Color.White)
-        }
-    }
-}
-
-@Composable
-fun AdminPanel(viewModel: MainViewModel, onInteraction: () -> Unit) {
-    Column(modifier = Modifier.fillMaxSize().padding(10.dp)) {
-        Text("PANEL DE CONTROL", style = MaterialTheme.typography.titleMedium, color = Color(0xFFFFD700), fontWeight = FontWeight.Bold)
-        Spacer(modifier = Modifier.height(10.dp))
-        Text("Gestionar usuarios y suscripciones (Simulado)", color = Color.White.copy(alpha = 0.6f), style = MaterialTheme.typography.bodySmall)
-        
-        // Aquí iría la lista de usuarios para el admin
-    }
-}
-
-@Composable
-fun OnyxAppTheme(content: @Composable () -> Unit) {
-    MaterialTheme(
-        colorScheme = darkColorScheme(
-            primary = Color(0xFF00B4D8),
-            background = Color.Black,
-            surface = Color(0xFF121212)
-        ),
-        typography = Typography(),
-        content = content
-    )
 }

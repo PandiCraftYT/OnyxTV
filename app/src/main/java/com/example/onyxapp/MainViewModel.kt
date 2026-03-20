@@ -9,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import com.google.android.gms.tasks.Tasks
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.Query
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -26,6 +27,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val prefs = application.getSharedPreferences("OnyxPrefs", Context.MODE_PRIVATE)
     private val db = FirebaseFirestore.getInstance()
     private val auth = FirebaseAuth.getInstance()
+    private var authListener: ListenerRegistration? = null
 
     var libVlc: LibVLC? = null
         private set
@@ -213,6 +215,40 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         } catch (e: Exception) { e.printStackTrace() }
     }
 
+    fun updateChannelUrl(oldUrl: String, newUrl: String) {
+        if (!isAdmin) return
+        db.collection("channels").whereEqualTo("url", oldUrl).get().addOnSuccessListener { snapshot ->
+            if (!snapshot.isEmpty) {
+                val docId = snapshot.documents[0].id
+                db.collection("channels").document(docId).update("url", newUrl)
+                    .addOnSuccessListener { observeChannels() }
+            }
+        }
+    }
+
+    fun deleteChannel(url: String) {
+        if (!isAdmin) return
+        db.collection("channels").whereEqualTo("url", url).get().addOnSuccessListener { snapshot ->
+            if (!snapshot.isEmpty) {
+                val docId = snapshot.documents[0].id
+                db.collection("channels").document(docId).delete()
+                    .addOnSuccessListener { observeChannels() }
+            }
+        }
+    }
+
+    fun addChannel(name: String, url: String, group: String, logo: String) {
+        if (!isAdmin) return
+        val newChannel = hashMapOf(
+            "name" to name,
+            "url" to url,
+            "group" to group,
+            "logo" to logo,
+            "order" to allChannels.size
+        )
+        db.collection("channels").add(newChannel).addOnSuccessListener { observeChannels() }
+    }
+
     fun fetchAllUsers() {
         if (!isAdmin) return
         db.collection("users").get().addOnSuccessListener { snapshot ->
@@ -248,7 +284,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val uid = user.uid
         isLoading = true
 
-        db.collection("users").document(uid)
+        authListener?.remove()
+        authListener = db.collection("users").document(uid)
             .addSnapshotListener { snapshot, e ->
                 if (e != null) { accountStatusMessage = "Error DB: ${e.code}"; isLoading = false; return@addSnapshotListener }
 
@@ -301,6 +338,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun logout() {
+        authListener?.remove()
         auth.signOut()
         isUserAuthenticated = false
         isUserAuthorized = false
@@ -442,6 +480,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     override fun onCleared() {
         super.onCleared()
+        authListener?.remove()
         mediaPlayer?.release()
         libVlc?.release()
     }
