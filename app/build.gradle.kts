@@ -6,18 +6,24 @@ plugins {
 
 android {
     namespace = "com.example.onyxapp"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.example.onyxapp"
         minSdk = 21
-        targetSdk = 30 
-        versionCode = 2
-        versionName = "1.1"
+        targetSdk = 35 
+        versionCode = 3
+        versionName = "1.2"
 
         // Soporte para TVs reales y Emuladores en un solo APK
         ndk {
             abiFilters.addAll(listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64"))
+        }
+    }
+
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
         }
     }
 
@@ -79,4 +85,5 @@ dependencies {
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 }

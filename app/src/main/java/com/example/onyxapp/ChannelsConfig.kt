@@ -5,7 +5,8 @@ data class Channel(
     val url: String,
     val logo: String? = null,
     val group: String? = null,
-    val id: String? = null // Agregamos ID para identificarlo en Firestore
+    val isActive: Boolean = true,
+    val id: String? = null
 )
 
 object ChannelsConfig {
@@ -32,7 +33,7 @@ object ChannelsConfig {
                 if (currentName.isEmpty()) currentName = "Canal"
             } else if (!trimmed.startsWith("#") && (trimmed.startsWith("http") || trimmed.contains("://"))) {
                 if (currentName.isNotEmpty()) {
-                    channels.add(Channel(currentName, trimmed, currentLogo, currentGroup.uppercase().trim()))
+                    channels.add(Channel(currentName, trimmed, currentLogo, currentGroup.uppercase().trim(), true))
                 }
                 currentName = ""; currentLogo = ""
             }

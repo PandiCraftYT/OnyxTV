@@ -16,8 +16,10 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
@@ -25,17 +27,19 @@ import kotlinx.coroutines.delay
 @Composable
 fun SplashScreen(onFinished: () -> Unit) {
     var startAnimation by remember { mutableStateOf(false) }
+    val configuration = LocalConfiguration.current
+    val isMobile = configuration.screenWidthDp < 600
     
     val alphaAnim by animateFloatAsState(
         targetValue = if (startAnimation) 1f else 0f,
-        animationSpec = tween(durationMillis = 800),
+        animationSpec = tween(durationMillis = 1000),
         label = "alpha"
     )
     
     val scaleAnim by animateFloatAsState(
-        targetValue = if (startAnimation) 1f else 0.9f,
+        targetValue = if (startAnimation) 1f else 0.7f,
         animationSpec = tween(
-            durationMillis = 800, 
+            durationMillis = 1000, 
             easing = Easing { fraction -> OvershootInterpolator(1.5f).getInterpolation(fraction) }
         ),
         label = "scale"
@@ -43,7 +47,7 @@ fun SplashScreen(onFinished: () -> Unit) {
 
     LaunchedEffect(Unit) {
         startAnimation = true
-        delay(1200) // Tiempo optimizado para entrar rápido
+        delay(2000)
         onFinished()
     }
 
@@ -59,37 +63,42 @@ fun SplashScreen(onFinished: () -> Unit) {
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
             modifier = Modifier
+                .fillMaxSize()
+                .padding(32.dp)
                 .alpha(alphaAnim)
                 .scale(scaleAnim)
         ) {
             Text(
                 text = "ONYX TV",
-                fontSize = 85.sp,
+                fontSize = if (isMobile) 48.sp else 80.sp,
                 color = Color.White,
                 fontWeight = FontWeight.Black,
                 style = TextStyle(
                     shadow = Shadow(
                         color = Color(0xFF00B4D8),
-                        blurRadius = 25f
+                        blurRadius = 30f
                     )
-                )
+                ),
+                textAlign = TextAlign.Center
             )
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(12.dp))
             Text(
-                text = "STREAMING PRIVADO",
-                fontSize = 14.sp,
-                color = Color(0xFF00B4D8).copy(alpha = 0.8f),
+                text = "STREAMING PREMIUM",
+                fontSize = if (isMobile) 10.sp else 14.sp,
+                color = Color(0xFF00B4D8),
                 fontWeight = FontWeight.Bold,
-                letterSpacing = 6.sp
+                letterSpacing = if (isMobile) 4.sp else 8.sp,
+                textAlign = TextAlign.Center
             )
             
-            Spacer(modifier = Modifier.height(50.dp))
+            Spacer(modifier = Modifier.height(60.dp))
             
             CircularProgressIndicator(
-                modifier = Modifier.size(24.dp),
+                modifier = Modifier.size(30.dp),
                 color = Color(0xFF00B4D8),
-                strokeWidth = 2.dp
+                strokeWidth = 3.dp
             )
         }
     }
