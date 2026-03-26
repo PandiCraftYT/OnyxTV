@@ -115,12 +115,12 @@ fun SettingsPanel(viewModel: MainViewModel, onInteraction: () -> Unit) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
                     Text("Para renovaciones o compra de cuentas premium, contacta al administrador.", textAlign = androidx.compose.ui.text.style.TextAlign.Center, color = Color.White.copy(alpha = 0.8f))
                     Spacer(Modifier.height(20.dp))
-                    Text("Instagram: @carlosnvz__", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 18.sp)
+                    Text("Instagram: @carlosnvz_", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 18.sp)
                 }
             },
             confirmButton = {
                 Button(onClick = { 
-                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://instagram.com/carlosnvz__"))
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://instagram.com/carlosnvz_"))
                     context.startActivity(intent)
                     showInfoDialog = false 
                 }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE1306C))) { Text("Abrir Instagram") }

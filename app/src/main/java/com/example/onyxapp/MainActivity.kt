@@ -23,10 +23,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Fullscreen
-import androidx.compose.material.icons.filled.FullscreenExit
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -68,14 +65,14 @@ class MainActivity : ComponentActivity() {
             var showSplash by remember { mutableStateOf(true) }
             var forceShowLogin by remember { mutableStateOf(false) }
 
-            // Vincular el callback del ViewModel con el estado de la interfaz
+            // 1. ESCUCHAR SOLICITUDES DE LOGIN (Desde canal promo)
             LaunchedEffect(Unit) {
                 viewModel.onShowLoginRequested = {
                     forceShowLogin = true
                 }
             }
 
-            // Redirección automática al menú tras login exitoso
+            // 2. REDIRECCIÓN AUTOMÁTICA AL MENÚ TRAS LOGIN EXITOSO
             LaunchedEffect(viewModel.isUserAuthenticated) {
                 if (viewModel.isUserAuthenticated) {
                     forceShowLogin = false
@@ -87,7 +84,7 @@ class MainActivity : ComponentActivity() {
                 if (showSplash) {
                     SplashScreen(onFinished = { showSplash = false })
                 } else {
-                    // SISTEMA DE SEGURIDAD: Auth Guard + Modo Invitado
+                    // SISTEMA DE SEGURIDAD Y NAVEGACIÓN
                     when {
                         forceShowLogin -> {
                             LoginScreen(viewModel) { 
@@ -117,26 +114,79 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun VideoStatusOverlay(isLoading: Boolean, errorMessage: String?) {
-    if (isLoading || errorMessage != null) {
+fun VideoControlsOverlay(
+    isPlaying: Boolean,
+    channelName: String,
+    onTogglePause: () -> Unit,
+    onNext: () -> Unit,
+    onFullScreen: () -> Unit,
+    isFullScreen: Boolean,
+    visible: Boolean
+) {
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn() + slideInVertically { it },
+        exit = fadeOut() + slideOutVertically { it }
+    ) {
         Box(
             modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
+            contentAlignment = Alignment.BottomCenter
         ) {
-            if (isLoading) {
-                CircularProgressIndicator(
-                    color = Color(0xFF00B4D8),
-                    modifier = Modifier.size(40.dp)
-                )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color.Black.copy(alpha = 0.6f))
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                // IZQUIERDA: Botones y Nombre del Canal
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                    IconButton(onClick = onTogglePause) {
+                        Icon(if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, null, tint = Color.White)
+                    }
+                    IconButton(onClick = onNext) {
+                        Icon(Icons.Default.SkipNext, null, tint = Color.White)
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = channelName.uppercase(),
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                // CENTRO: Indicador LIVE
+                Box(modifier = Modifier.weight(0.5f), contentAlignment = Alignment.Center) {
+                    Text(
+                        text = "LIVE",
+                        color = Color.Red,
+                        fontWeight = FontWeight.Black,
+                        fontSize = 14.sp
+                    )
+                }
+
+                // DERECHA: Pantalla Completa
+                Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
+                    IconButton(onClick = onFullScreen) {
+                        Icon(if (isFullScreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen, null, tint = Color.White)
+                    }
+                }
             }
+        }
+    }
+}
+
+@Composable
+fun VideoStatusOverlay(isLoading: Boolean, errorMessage: String?) {
+    if (isLoading || errorMessage != null) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            if (isLoading) CircularProgressIndicator(color = Color(0xFF00B4D8), modifier = Modifier.size(40.dp))
             errorMessage?.let {
-                Text(
-                    text = it,
-                    color = Color.Red,
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(16.dp).background(Color.Black.copy(0.4f), RoundedCornerShape(8.dp)).padding(8.dp)
-                )
+                Text(it, color = Color.Red, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, modifier = Modifier.padding(16.dp).background(Color.Black.copy(0.4f), RoundedCornerShape(8.dp)).padding(8.dp))
             }
         }
     }
@@ -147,35 +197,24 @@ fun VideoStatusOverlay(isLoading: Boolean, errorMessage: String?) {
 fun MainScreen(viewModel: MainViewModel, onLoginRequest: () -> Unit) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    
-    val isTV = remember { 
-        context.packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK) || 
-        context.packageManager.hasSystemFeature("android.hardware.type.television") 
-    }
+    val isTV = remember { context.packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK) || context.packageManager.hasSystemFeature("android.hardware.type.television") }
     val isMobile = !isTV
 
     var isFullScreen by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(true) }
+    var showVideoControls by remember { mutableStateOf(false) }
     val activity = context as? Activity
 
-    var interactionKey by remember { mutableStateOf(Any()) }
-    var isOpeningMenuByKey by remember { mutableStateOf(false) }
-    val resetTimer = { interactionKey = Any() }
-
-    LaunchedEffect(isFullScreen, isMobile) {
-        if (isMobile) {
-            if (isFullScreen) {
-                activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-            } else {
-                activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-            }
+    LaunchedEffect(showVideoControls) {
+        if (showVideoControls) {
+            delay(5000)
+            showVideoControls = false
         }
     }
 
-    LaunchedEffect(viewModel.authError) {
-        viewModel.authError?.let {
-            Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
-            viewModel.clearAuthError()
+    LaunchedEffect(isFullScreen, isMobile) {
+        if (isMobile) {
+            activity?.requestedOrientation = if (isFullScreen) ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE else ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
         }
     }
 
@@ -194,7 +233,9 @@ fun MainScreen(viewModel: MainViewModel, onLoginRequest: () -> Unit) {
         val list = mutableListOf("LIVE")
         if (viewModel.isAdmin) list.add("ADMIN")
         list.add("AJUSTES")
-        if (!viewModel.isUserAuthenticated) list.add("INICIAR SESIÓN")
+        if (!viewModel.isUserAuthenticated) {
+            if (isTV) list.add("ACCEDER") else list.add("INICIAR SESIÓN")
+        }
         list
     }
     var selectedCategory by remember { mutableStateOf("LIVE") }
@@ -214,115 +255,77 @@ fun MainScreen(viewModel: MainViewModel, onLoginRequest: () -> Unit) {
         }
     }
 
-    LaunchedEffect(isSearchActiveMain) {
-        if (isSearchActiveMain) {
-            delay(150)
-            try { searchFocusRequester.requestFocus() } catch (e: Exception) {}
-        }
-    }
-
-    LaunchedEffect(showMenu, interactionKey) {
-        if (isTV && showMenu) {
-            delay(15000)
-            showMenu = false
-        }
+    LaunchedEffect(showMenu) {
+        if (isTV && showMenu) { delay(15000); showMenu = false }
     }
 
     BackHandler(enabled = isFullScreen || (isTV && showMenu)) { 
-        if (isMobile) {
-            isFullScreen = false
-            showMenu = true 
-        } else {
-            showMenu = false
-        }
+        if (isMobile) { isFullScreen = false; showMenu = true } else { showMenu = false }
     }
 
-    Box(modifier = Modifier
-        .fillMaxSize()
-        .background(Color.Black)
-        .onPreviewKeyEvent { event ->
-            if (!isTV) return@onPreviewKeyEvent false
-            if (event.type == KeyEventType.KeyDown) resetTimer()
-
+    Box(modifier = Modifier.fillMaxSize().background(Color.Black).onPreviewKeyEvent { event ->
+        if (!isTV) return@onPreviewKeyEvent false
+        if (event.type == KeyEventType.KeyDown) {
             val isCenterKey = event.nativeKeyEvent.keyCode in listOf(
                 KeyEvent.KEYCODE_DPAD_CENTER,
                 KeyEvent.KEYCODE_ENTER,
                 KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE
             )
-
             if (isCenterKey) {
-                if (event.type == KeyEventType.KeyDown) {
-                    if (!showMenu) {
-                        showMenu = true
-                        isOpeningMenuByKey = true
-                        true
-                    } else if (isOpeningMenuByKey) {
-                        true
-                    } else {
-                        false
-                    }
-                } else { 
-                    if (isOpeningMenuByKey) {
-                        isOpeningMenuByKey = false
-                        true
-                    } else {
-                        false
-                    }
+                if (!showMenu) {
+                    showMenu = true
+                    return@onPreviewKeyEvent true
                 }
-            } else if (!showMenu && event.type == KeyEventType.KeyDown) {
+            } else if (!showMenu) {
                 when (event.nativeKeyEvent.keyCode) {
-                    KeyEvent.KEYCODE_DPAD_UP -> { viewModel.zapNext(); true }
-                    KeyEvent.KEYCODE_DPAD_DOWN -> { viewModel.zapPrevious(); true }
-                    else -> false
+                    KeyEvent.KEYCODE_DPAD_UP -> { viewModel.zapNext(); return@onPreviewKeyEvent true }
+                    KeyEvent.KEYCODE_DPAD_DOWN -> { viewModel.zapPrevious(); return@onPreviewKeyEvent true }
                 }
-            } else false
+            }
         }
-    ) {
+        false
+    }) {
         if (isTV) AnimatedBackground()
         
-        val videoModifier = remember(isFullScreen, isMobile, viewModel.videoAspectRatio, showMenu, selectedCategory, isOpeningMenuByKey) {
-            val base = when {
+        val videoModifier = remember(isFullScreen, isMobile, viewModel.videoAspectRatio, showMenu, selectedCategory) {
+            when {
                 isFullScreen -> Modifier.fillMaxSize()
-                isMobile -> Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(16f / 9f)
-                    .align(Alignment.TopCenter)
-                showMenu && isTV -> Modifier
-                    .padding(top = 100.dp, end = 40.dp)
-                    .align(Alignment.TopEnd)
-                    .fillMaxWidth(if (selectedCategory == "ADMIN") 0.25f else 0.55f)
-                    .aspectRatio(viewModel.videoAspectRatio)
-                    .clip(RoundedCornerShape(24.dp))
-                    .border(BorderStroke(2.dp, Color.White.copy(alpha = 0.15f)), RoundedCornerShape(24.dp))
+                isMobile -> Modifier.fillMaxWidth().aspectRatio(16f / 9f).align(Alignment.TopCenter)
+                showMenu && isTV -> Modifier.padding(top = 100.dp, end = 40.dp).align(Alignment.TopEnd).fillMaxWidth(if (selectedCategory == "ADMIN") 0.25f else 0.55f).aspectRatio(viewModel.videoAspectRatio).clip(RoundedCornerShape(24.dp)).border(BorderStroke(2.dp, Color.White.copy(alpha = 0.15f)), RoundedCornerShape(24.dp))
                 else -> Modifier.fillMaxSize()
-            }
-            
-            if (isTV) {
-                base.clickable { if (!isOpeningMenuByKey) showMenu = !showMenu }
-            } else {
-                base
             }
         }
 
-        Box(modifier = videoModifier) {
-            viewModel.mediaPlayer?.let { player ->
-                VideoPlayer(player, Modifier.fillMaxSize())
-            }
+        Box(modifier = videoModifier.clickable { 
+            if (isTV) showMenu = !showMenu 
+            else showVideoControls = !showVideoControls 
+        }) {
+            viewModel.mediaPlayer?.let { player -> VideoPlayer(player, Modifier.fillMaxSize()) }
             VideoStatusOverlay(viewModel.isLoading, viewModel.errorMessage)
+            
+            if (isMobile || isFullScreen) {
+                val currentChannel = viewModel.filteredChannels.find { it.url == viewModel.currentChannelUrl }
+                VideoControlsOverlay(
+                    isPlaying = viewModel.isPlaying,
+                    channelName = currentChannel?.name ?: "Sin canal",
+                    onTogglePause = { viewModel.togglePause() },
+                    onNext = { viewModel.zapNext() },
+                    onFullScreen = { 
+                        if (isFullScreen) { isFullScreen = false; showMenu = true } 
+                        else { isFullScreen = true; showMenu = false }
+                        showVideoControls = false
+                    },
+                    isFullScreen = isFullScreen,
+                    visible = showVideoControls
+                )
+            }
         }
 
         if (!isFullScreen) {
             if (isMobile) {
                 // UI MÓVIL (HEADER DINÁMICO)
                 Column(modifier = Modifier.fillMaxSize()) {
-                    Box(modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f).background(Color.Transparent)) {
-                        IconButton(
-                            onClick = { isFullScreen = true; showMenu = false },
-                            modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp).background(Color.Black.copy(0.5f), RoundedCornerShape(8.dp))
-                        ) {
-                            Icon(Icons.Default.Fullscreen, null, tint = Color.White)
-                        }
-                    }
+                    Box(modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f).background(Color.Transparent))
                     Column(modifier = Modifier.fillMaxWidth().weight(1f).background(Color(0xFF0A0E12)).padding(horizontal = 16.dp)) {
                         Text(
                             text = if (viewModel.isUserAuthenticated) "ONYX TV - PREMIUM" else "ONYX TV - GRATIS",
@@ -394,22 +397,20 @@ fun MainScreen(viewModel: MainViewModel, onLoginRequest: () -> Unit) {
                             Box(modifier = Modifier.fillMaxWidth()) {
                                 if (!isSearchActiveMain && viewModel.searchQuery.isEmpty()) {
                                     Box(
-                                        modifier = Modifier.fillMaxWidth().height(42.dp).clip(RoundedCornerShape(12.dp)).background(Color.White.copy(0.05f)).border(1.dp, Color.White.copy(0.1f), RoundedCornerShape(12.dp)).clickable { isSearchActiveMain = true; resetTimer() }.padding(horizontal = 16.dp),
+                                        modifier = Modifier.fillMaxWidth().height(42.dp).clip(RoundedCornerShape(12.dp)).background(Color.White.copy(0.05f)).border(1.dp, Color.White.copy(0.1f), RoundedCornerShape(12.dp)).clickable { isSearchActiveMain = true }.padding(horizontal = 16.dp),
                                         contentAlignment = Alignment.CenterStart
                                     ) {
                                         Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Icon(Icons.Default.Search, null, tint = Color(0xFF00B4D8), modifier = Modifier.size(18.dp))
-                                            Spacer(Modifier.width(12.dp))
-                                            Text("Buscar...", color = Color.White.copy(0.3f), fontSize = 13.sp)
+                                            Icon(Icons.Default.Search, null, tint = Color(0xFF00B4D8), modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("Buscar...", color = Color.White.copy(0.3f), fontSize = 13.sp)
                                         }
                                     }
                                 } else {
                                     TextField(
                                         value = viewModel.searchQuery,
-                                        onValueChange = { viewModel.updateSearchQuery(it); resetTimer() },
+                                        onValueChange = { viewModel.updateSearchQuery(it) },
                                         placeholder = { Text("Buscar...", fontSize = 13.sp) },
                                         modifier = Modifier.fillMaxWidth().height(48.dp).focusRequester(searchFocusRequester).onFocusChanged { 
-                                            if (it.isFocused) resetTimer()
+                                            if (it.isFocused) { }
                                             if (!it.isFocused && viewModel.searchQuery.isEmpty()) isSearchActiveMain = false 
                                         },
                                         shape = RoundedCornerShape(12.dp),
@@ -426,20 +427,19 @@ fun MainScreen(viewModel: MainViewModel, onLoginRequest: () -> Unit) {
                                         isSelected = selectedCategory == cat,
                                         modifier = if (cat == selectedCategory) Modifier.focusRequester(initialFocusRequester) else Modifier
                                     ) { 
-                                        if (cat == "INICIAR SESIÓN") onLoginRequest() else selectedCategory = cat
-                                        resetTimer() 
+                                        if (cat == "INICIAR SESIÓN" || cat == "ACCEDER") onLoginRequest() else selectedCategory = cat
                                     } 
                                 }
                             }
                             Spacer(Modifier.height(10.dp))
                             Box(modifier = Modifier.weight(1f)) {
-                                if (selectedCategory == "AJUSTES") SettingsPanel(viewModel) { resetTimer() }
-                                else if (selectedCategory == "ADMIN") AdminPanel(viewModel) { resetTimer() }
+                                if (selectedCategory == "AJUSTES") SettingsPanel(viewModel) { }
+                                else if (selectedCategory == "ADMIN") AdminPanel(viewModel) { }
                                 else {
                                     LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                         itemsIndexed(viewModel.filteredChannels) { index, channel ->
                                             val displayNumber = if (viewModel.isUserAuthenticated) index + 1 else index
-                                            ChannelListItem(number = displayNumber, channel = channel, isSelected = viewModel.currentChannelUrl == channel.url, isFavorite = viewModel.favorites.any { it.url == channel.url }, isMobile = false, onClick = { viewModel.playVideo(channel.url); resetTimer() }, onFocus = { resetTimer() }, onLeft = { try { initialFocusRequester.requestFocus() } catch(e:Exception){} }, onRight = { showMenu = false })
+                                            ChannelListItem(number = displayNumber, channel = channel, isSelected = viewModel.currentChannelUrl == channel.url, isFavorite = viewModel.favorites.any { it.url == channel.url }, isMobile = false, onClick = { viewModel.playVideo(channel.url) }, onFocus = { }, onLeft = { try { initialFocusRequester.requestFocus() } catch(e:Exception){} }, onRight = { showMenu = false })
                                         }
                                     }
                                 }

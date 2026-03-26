@@ -41,7 +41,6 @@ fun LoginScreen(viewModel: MainViewModel, onDismiss: () -> Unit) {
     
     val isPortrait = configuration.orientation == android.content.res.Configuration.ORIENTATION_PORTRAIT
     val scrollState = rememberScrollState()
-    
     val showPromo = viewModel.isFromPromoChannel || !viewModel.isUserAuthenticated
 
     Box(
@@ -50,20 +49,13 @@ fun LoginScreen(viewModel: MainViewModel, onDismiss: () -> Unit) {
             .background(Brush.verticalGradient(listOf(Color(0xFF00141A), Color.Black))),
         contentAlignment = Alignment.Center
     ) {
-        val containerModifier = if (isPortrait) {
-            Modifier
-                .fillMaxSize()
-                .verticalScroll(scrollState)
-                .padding(horizontal = 16.dp, vertical = 32.dp)
-        } else {
-            Modifier
-                .fillMaxSize()
-                .padding(24.dp)
-        }
-
         if (isPortrait) {
+            // DISEÑO MÓVIL (Vertical Centrado)
             Column(
-                modifier = containerModifier,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(scrollState)
+                    .padding(horizontal = 24.dp, vertical = 40.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
@@ -71,11 +63,11 @@ fun LoginScreen(viewModel: MainViewModel, onDismiss: () -> Unit) {
                     PromoCard(
                         modifier = Modifier.fillMaxWidth(),
                         onContactClick = {
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://instagram.com/carlosnvz__"))
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.instagram.com/carlosnvz_"))
                             context.startActivity(intent)
                         }
                     )
-                    Spacer(Modifier.height(24.dp))
+                    Spacer(Modifier.height(32.dp))
                 }
                 LoginForm(
                     modifier = Modifier.fillMaxWidth(),
@@ -91,19 +83,22 @@ fun LoginScreen(viewModel: MainViewModel, onDismiss: () -> Unit) {
                 )
             }
         } else {
+            // DISEÑO TV (Horizontal Centrado)
             Row(
-                modifier = containerModifier,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(40.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center
             ) {
                 if (showPromo) {
                     PromoCard(
                         modifier = Modifier
-                            .weight(1.2f)
-                            .padding(end = 24.dp)
-                            .fillMaxHeight(0.85f),
+                            .weight(1.1f)
+                            .fillMaxHeight(0.9f)
+                            .padding(end = 32.dp),
                         onContactClick = {
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://instagram.com/carlosnvz__"))
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.instagram.com/carlosnvz_"))
                             context.startActivity(intent)
                         }
                     )
@@ -112,7 +107,7 @@ fun LoginScreen(viewModel: MainViewModel, onDismiss: () -> Unit) {
                     modifier = Modifier
                         .weight(1f)
                         .widthIn(max = 450.dp)
-                        .fillMaxHeight(0.85f),
+                        .fillMaxHeight(0.9f),
                     user = user,
                     onUserChange = { user = it },
                     pass = pass,
@@ -132,46 +127,46 @@ fun LoginScreen(viewModel: MainViewModel, onDismiss: () -> Unit) {
 fun PromoCard(modifier: Modifier, onContactClick: () -> Unit) {
     Card(
         modifier = modifier,
-        shape = RoundedCornerShape(28.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF00B4D8).copy(alpha = 0.1f)),
-        border = BorderStroke(1.dp, Color(0xFF00B4D8).copy(alpha = 0.3f))
+        shape = RoundedCornerShape(32.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF00B4D8).copy(alpha = 0.08f)),
+        border = BorderStroke(1.dp, Color(0xFF00B4D8).copy(alpha = 0.25f))
     ) {
         Column(
-            modifier = Modifier.padding(24.dp),
+            modifier = Modifier.padding(32.dp).fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Icon(Icons.Default.Star, null, tint = Color(0xFF00B4D8), modifier = Modifier.size(48.dp))
-            Spacer(Modifier.height(12.dp))
-            Text("ONYX PREMIUM", fontSize = 22.sp, fontWeight = FontWeight.Black, color = Color.White)
+            Icon(Icons.Default.Star, null, tint = Color(0xFF00B4D8), modifier = Modifier.size(56.dp))
             Spacer(Modifier.height(16.dp))
+            Text("ONYX PREMIUM", fontSize = 26.sp, fontWeight = FontWeight.Black, color = Color.White)
+            Spacer(Modifier.height(24.dp))
             
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 PromoItem("Más de 60 Canales en Vivo")
                 PromoItem("Calidad Full HD y 4K")
                 PromoItem("Sin anuncios ni interrupciones")
                 PromoItem("Soporte 24/7 Personalizado")
             }
             
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.weight(1f))
             
             Text(
-                "Para contratar el servicio Premium contacta directamente por Instagram:",
+                "Para contratar el servicio Premium contacta por Instagram:",
                 color = Color.White.copy(0.6f),
                 textAlign = TextAlign.Center,
-                fontSize = 12.sp,
-                lineHeight = 16.sp
+                fontSize = 13.sp,
+                lineHeight = 18.sp
             )
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(20.dp))
             Button(
                 onClick = onContactClick,
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE1306C)),
-                modifier = Modifier.fillMaxWidth().height(48.dp),
-                shape = RoundedCornerShape(12.dp)
+                modifier = Modifier.fillMaxWidth().height(52.dp),
+                shape = RoundedCornerShape(14.dp)
             ) {
-                Icon(Icons.AutoMirrored.Filled.OpenInNew, null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text("INSTAGRAM", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                Icon(Icons.AutoMirrored.Filled.OpenInNew, null, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(10.dp))
+                Text("CONTRATAR AQUÍ", fontWeight = FontWeight.Bold, fontSize = 15.sp)
             }
         }
     }
@@ -204,19 +199,19 @@ fun LoginForm(
 
     Card(
         modifier = modifier,
-        shape = RoundedCornerShape(28.dp),
+        shape = RoundedCornerShape(32.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.05f)),
         border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f))
     ) {
         Column(
-            modifier = Modifier.padding(24.dp),
+            modifier = Modifier.padding(40.dp).fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Text("BIENVENIDO", fontSize = 24.sp, fontWeight = FontWeight.Black, color = Color.White)
-            Text("Ingresa a tu cuenta", color = Color.White.copy(0.5f), fontSize = 14.sp)
+            Text("BIENVENIDO", fontSize = 28.sp, fontWeight = FontWeight.Black, color = Color.White)
+            Text("Ingresa a tu cuenta", color = Color.White.copy(0.5f), fontSize = 15.sp)
             
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(32.dp))
 
             OutlinedTextField(
                 value = user,
@@ -225,11 +220,11 @@ fun LoginForm(
                 modifier = Modifier.fillMaxWidth(),
                 leadingIcon = { Icon(Icons.Default.Person, null, tint = Color(0xFF00B4D8)) },
                 singleLine = true,
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(14.dp),
                 colors = fieldColors
             )
 
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(16.dp))
 
             OutlinedTextField(
                 value = pass,
@@ -244,25 +239,25 @@ fun LoginForm(
                 },
                 visualTransformation = if (passVisible) VisualTransformation.None else PasswordVisualTransformation(),
                 singleLine = true,
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(14.dp),
                 colors = fieldColors
             )
 
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(32.dp))
 
             Button(
                 onClick = onLogin,
-                modifier = Modifier.fillMaxWidth().height(50.dp),
+                modifier = Modifier.fillMaxWidth().height(56.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00B4D8)),
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(14.dp),
                 enabled = !isLoading
             ) {
                 if (isLoading) CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
-                else Text("INICIAR SESIÓN", fontWeight = FontWeight.Bold)
+                else Text("INICIAR SESIÓN", fontWeight = FontWeight.Bold, fontSize = 16.sp)
             }
 
-            TextButton(onClick = onDismiss, modifier = Modifier.padding(top = 8.dp)) {
-                Text("VOLVER ATRÁS", color = Color.White.copy(alpha = 0.4f), fontSize = 12.sp)
+            TextButton(onClick = onDismiss, modifier = Modifier.padding(top = 16.dp)) {
+                Text("CONTINUAR COMO INVITADO", color = Color.White.copy(alpha = 0.4f), fontSize = 13.sp)
             }
         }
     }
@@ -274,8 +269,8 @@ private fun PromoItem(text: String) {
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF00B4D8), modifier = Modifier.size(18.dp))
-        Spacer(Modifier.width(10.dp))
-        Text(text, color = Color.White.copy(0.8f), fontSize = 14.sp)
+        Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF00B4D8), modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(12.dp))
+        Text(text, color = Color.White.copy(0.85f), fontSize = 15.sp)
     }
 }
