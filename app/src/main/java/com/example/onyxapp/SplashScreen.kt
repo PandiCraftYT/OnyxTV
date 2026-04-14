@@ -78,7 +78,7 @@ fun SplashScreen(onFinished: () -> Unit) {
                 style = TextStyle(
                     shadow = Shadow(
                         color = Color(0xFF00B4D8),
-                        blurRadius = 30f
+                        blurRadius = 25f
                     )
                 ),
                 textAlign = TextAlign.Center

@@ -1,21 +1,21 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
-    alias(libs.plugins.google.services)
+    alias(libs.plugins.kotlin.serialization)
+    // Supabase no requiere plugin de google-services a menos que uses Push
 }
 
 android {
     namespace = "com.example.onyxapp"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.example.onyxapp"
-        minSdk = 21
+        minSdk = 23
         targetSdk = 35 
         versionCode = 3
         versionName = "1.2"
 
-        // Soporte para TVs reales y Emuladores en un solo APK
         ndk {
             abiFilters.addAll(listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64"))
         }
@@ -38,7 +38,6 @@ android {
         }
     }
     
-    // Desactivamos splits para generar un único APK universal
     splits {
         abi {
             isEnable = false
@@ -77,13 +76,20 @@ dependencies {
     implementation("io.coil-kt:coil-svg:2.5.0")
     implementation("androidx.compose.material:material-icons-extended")
 
-    implementation(platform(libs.firebase.bom))
-    implementation(libs.firebase.auth)
-    implementation(libs.firebase.firestore)
+    // Supabase
+    implementation(platform(libs.supabase.bom))
+    implementation(libs.supabase.postgrest)
+    implementation(libs.supabase.auth)
+    implementation(libs.supabase.realtime)
+    implementation(libs.ktor.client.android)
+    implementation(libs.ktor.client.core)
+    implementation(libs.ktor.client.cio)
+    implementation(libs.ktor.client.okhttp)
+    implementation(libs.ktor.client.websockets)
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
 
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
-    debugImplementation("androidx.compose.ui:ui-test-manifest")
 }

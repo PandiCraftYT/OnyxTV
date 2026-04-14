@@ -2,8 +2,11 @@ package com.example.onyxapp.ui.components
 
 import android.content.Intent
 import android.net.Uri
+import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -15,10 +18,12 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -43,6 +48,15 @@ fun LoginScreen(viewModel: MainViewModel, onDismiss: () -> Unit) {
     val scrollState = rememberScrollState()
     val showPromo = viewModel.isFromPromoChannel || !viewModel.isUserAuthenticated
 
+    val onContactClick = {
+        try {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.instagram.com/carlosnvz_"))
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            Toast.makeText(context, "No se pudo abrir el enlace", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -50,7 +64,6 @@ fun LoginScreen(viewModel: MainViewModel, onDismiss: () -> Unit) {
         contentAlignment = Alignment.Center
     ) {
         if (isPortrait) {
-            // DISEÑO MÓVIL (Vertical Centrado)
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -62,28 +75,25 @@ fun LoginScreen(viewModel: MainViewModel, onDismiss: () -> Unit) {
                 if (showPromo) {
                     PromoCard(
                         modifier = Modifier.fillMaxWidth(),
-                        onContactClick = {
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.instagram.com/carlosnvz_"))
-                            context.startActivity(intent)
-                        }
+                        onContactClick = onContactClick
                     )
                     Spacer(Modifier.height(32.dp))
                 }
                 LoginForm(
                     modifier = Modifier.fillMaxWidth(),
                     user = user,
-                    onUserChange = { user = it },
+                    onUserChange = { user = it; viewModel.clearAuthError() },
                     pass = pass,
-                    onPassChange = { pass = it },
+                    onPassChange = { pass = it; viewModel.clearAuthError() },
                     passVisible = passVisible,
                     onTogglePass = { passVisible = !passVisible },
-                    isLoading = viewModel.isLoading,
+                    isAuthLoading = viewModel.isAuthLoading,
+                    authError = viewModel.authError,
                     onLogin = { viewModel.signIn(user, pass) },
                     onDismiss = onDismiss
                 )
             }
         } else {
-            // DISEÑO TV (Horizontal Centrado)
             Row(
                 modifier = Modifier
                     .fillMaxSize()
@@ -97,10 +107,7 @@ fun LoginScreen(viewModel: MainViewModel, onDismiss: () -> Unit) {
                             .weight(1.1f)
                             .fillMaxHeight(0.9f)
                             .padding(end = 32.dp),
-                        onContactClick = {
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.instagram.com/carlosnvz_"))
-                            context.startActivity(intent)
-                        }
+                        onContactClick = onContactClick
                     )
                 }
                 LoginForm(
@@ -109,12 +116,13 @@ fun LoginScreen(viewModel: MainViewModel, onDismiss: () -> Unit) {
                         .widthIn(max = 450.dp)
                         .fillMaxHeight(0.9f),
                     user = user,
-                    onUserChange = { user = it },
+                    onUserChange = { user = it; viewModel.clearAuthError() },
                     pass = pass,
-                    onPassChange = { pass = it },
+                    onPassChange = { pass = it; viewModel.clearAuthError() },
                     passVisible = passVisible,
                     onTogglePass = { passVisible = !passVisible },
-                    isLoading = viewModel.isLoading,
+                    isAuthLoading = viewModel.isAuthLoading,
+                    authError = viewModel.authError,
                     onLogin = { viewModel.signIn(user, pass) },
                     onDismiss = onDismiss
                 )
@@ -125,11 +133,15 @@ fun LoginScreen(viewModel: MainViewModel, onDismiss: () -> Unit) {
 
 @Composable
 fun PromoCard(modifier: Modifier, onContactClick: () -> Unit) {
+    var isFocused by remember { mutableStateOf(false) }
+    
     Card(
-        modifier = modifier,
+        modifier = modifier
+            .onFocusChanged { isFocused = it.isFocused }
+            .clickable { onContactClick() },
         shape = RoundedCornerShape(32.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF00B4D8).copy(alpha = 0.08f)),
-        border = BorderStroke(1.dp, Color(0xFF00B4D8).copy(alpha = 0.25f))
+        colors = CardDefaults.cardColors(containerColor = if (isFocused) Color(0xFF00B4D8).copy(alpha = 0.15f) else Color(0xFF00B4D8).copy(alpha = 0.08f)),
+        border = BorderStroke(if (isFocused) 3.dp else 1.dp, if (isFocused) Color(0xFF00B4D8) else Color(0xFF00B4D8).copy(alpha = 0.25f))
     ) {
         Column(
             modifier = Modifier.padding(32.dp).fillMaxSize(),
@@ -181,14 +193,20 @@ fun LoginForm(
     onPassChange: (String) -> Unit,
     passVisible: Boolean,
     onTogglePass: () -> Unit,
-    isLoading: Boolean,
+    isAuthLoading: Boolean,
+    authError: String?,
     onLogin: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val focusManager = LocalFocusManager.current
+    var isFormFocused by remember { mutableStateOf(false) }
+    var isUserFocused by remember { mutableStateOf(false) }
+    var isPassFocused by remember { mutableStateOf(false) }
+
     val fieldColors = TextFieldDefaults.colors(
         focusedTextColor = Color.White,
         unfocusedTextColor = Color.White,
-        focusedContainerColor = Color.White.copy(0.05f),
+        focusedContainerColor = Color.White.copy(0.12f),
         unfocusedContainerColor = Color.White.copy(0.05f),
         cursorColor = Color(0xFF00B4D8),
         focusedIndicatorColor = Color(0xFF00B4D8),
@@ -198,10 +216,10 @@ fun LoginForm(
     )
 
     Card(
-        modifier = modifier,
+        modifier = modifier.onFocusChanged { isFormFocused = it.isFocused },
         shape = RoundedCornerShape(32.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.05f)),
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f))
+        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = if (isFormFocused) 0.08f else 0.05f)),
+        border = BorderStroke(if (isFormFocused) 3.dp else 1.dp, if (isFormFocused) Color(0xFF00B4D8).copy(0.8f) else Color.White.copy(alpha = 0.1f))
     ) {
         Column(
             modifier = Modifier.padding(40.dp).fillMaxSize(),
@@ -217,8 +235,10 @@ fun LoginForm(
                 value = user,
                 onValueChange = onUserChange,
                 label = { Text("Usuario") },
-                modifier = Modifier.fillMaxWidth(),
-                leadingIcon = { Icon(Icons.Default.Person, null, tint = Color(0xFF00B4D8)) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onFocusChanged { isUserFocused = it.isFocused },
+                leadingIcon = { Icon(Icons.Default.Person, null, tint = if (isUserFocused) Color(0xFF00B4D8) else Color.White.copy(0.6f)) },
                 singleLine = true,
                 shape = RoundedCornerShape(14.dp),
                 colors = fieldColors
@@ -230,11 +250,13 @@ fun LoginForm(
                 value = pass,
                 onValueChange = onPassChange,
                 label = { Text("Contraseña") },
-                modifier = Modifier.fillMaxWidth(),
-                leadingIcon = { Icon(Icons.Default.Lock, null, tint = Color(0xFF00B4D8)) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onFocusChanged { isPassFocused = it.isFocused },
+                leadingIcon = { Icon(Icons.Default.Lock, null, tint = if (isPassFocused) Color(0xFF00B4D8) else Color.White.copy(0.6f)) },
                 trailingIcon = {
                     IconButton(onClick = onTogglePass) {
-                        Icon(if (passVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff, null)
+                        Icon(if (passVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff, null, tint = Color.White.copy(0.6f))
                     }
                 },
                 visualTransformation = if (passVisible) VisualTransformation.None else PasswordVisualTransformation(),
@@ -243,16 +265,32 @@ fun LoginForm(
                 colors = fieldColors
             )
 
+            AnimatedVisibility(visible = authError != null) {
+                authError?.let {
+                    Text(
+                        text = it,
+                        color = Color.Red,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(top = 16.dp)
+                    )
+                }
+            }
+
             Spacer(Modifier.height(32.dp))
 
             Button(
-                onClick = onLogin,
+                onClick = { 
+                    focusManager.clearFocus()
+                    onLogin() 
+                },
                 modifier = Modifier.fillMaxWidth().height(56.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00B4D8)),
                 shape = RoundedCornerShape(14.dp),
-                enabled = !isLoading
+                enabled = !isAuthLoading
             ) {
-                if (isLoading) CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
+                if (isAuthLoading) CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
                 else Text("INICIAR SESIÓN", fontWeight = FontWeight.Bold, fontSize = 16.sp)
             }
 

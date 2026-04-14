@@ -22,6 +22,7 @@
         android:isGame="false"
         android:theme="@style/Theme.AppCompat.NoActionBar"
         android:usesCleartextTraffic="true"
+        android:extractNativeLibs="true"
         tools:targetApi="m">
 
         <activity
