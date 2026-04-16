@@ -38,6 +38,25 @@ data class UserProfile(
     @SerialName("email") val email: String? = null
 )
 
+@Serializable
+data class AppConfig(
+    val id: Long? = null,
+    val versionCode: Long,
+    val versionName: String,
+    val downloadUrl: String,
+    val changeLog: String? = null,
+    val forceUpdate: Boolean = false
+)
+
+@Serializable
+data class GlobalMessage(
+    val id: Long? = null,
+    val message: String,
+    val type: String, // 'marquee' o 'popup'
+    @SerialName("is_active") val isActive: Boolean = true,
+    @SerialName("duration_seconds") val durationSeconds: Int = 10
+)
+
 object ChannelsConfig {
     const val PC_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 }

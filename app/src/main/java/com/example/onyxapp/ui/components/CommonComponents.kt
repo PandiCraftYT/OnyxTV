@@ -1,27 +1,28 @@
+@file:OptIn(ExperimentalTvMaterial3Api::class)
 package com.example.onyxapp.ui.components
 
 import android.view.ViewGroup
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.*
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.*
@@ -32,22 +33,16 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.tv.material3.Border
-import androidx.tv.material3.ClickableSurfaceDefaults
-import androidx.tv.material3.ExperimentalTvMaterial3Api
-import androidx.tv.material3.Surface
+import androidx.compose.ui.window.Dialog
+import androidx.tv.material3.*
 import coil.compose.AsyncImage
-import com.example.onyxapp.Channel
-import com.example.onyxapp.MainViewModel
-import com.example.onyxapp.Movie
-import com.example.onyxapp.SubscriptionService
+import com.example.onyxapp.*
+import kotlinx.coroutines.delay
 import org.videolan.libvlc.MediaPlayer
 import org.videolan.libvlc.util.VLCVideoLayout
 import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import java.util.*
 
-@OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun ChannelListItem(
     number: Int,
@@ -67,22 +62,15 @@ fun ChannelListItem(
     LaunchedEffect(isFocused) { if (isFocused && !isMobile) onFocus() }
 
     if (isMobile) {
-        Box(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(if (isPromo) 60.dp else 75.dp)
+                .height(70.dp)
                 .clip(RoundedCornerShape(12.dp))
-                .background(
-                    if (isPromo) Color(0xFF00B4D8).copy(alpha = 0.3f)
-                    else if (isSelected) Color(0xFF00B4D8).copy(alpha = 0.15f)
-                    else Color.White.copy(alpha = 0.03f)
-                )
-                .border(
-                    width = if (isPromo || isSelected) 1.dp else 0.dp,
-                    color = if (isPromo) Color(0xFF00B4D8) else if (isSelected) Color(0xFF00B4D8).copy(0.5f) else Color.Transparent,
-                    shape = RoundedCornerShape(12.dp)
-                )
+                .background(if (isSelected) Color(0xFF00B4D8).copy(alpha = 0.15f) else Color.White.copy(alpha = 0.05f))
                 .clickable(onClick = onClick)
+                .padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
             ChannelItemContent(
                 number = number,
@@ -91,8 +79,7 @@ fun ChannelListItem(
                 isFavorite = isFavorite,
                 isMobile = true,
                 isFocused = false,
-                isPromo = isPromo,
-                modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp)
+                isPromo = isPromo
             )
         }
     } else {
@@ -101,8 +88,8 @@ fun ChannelListItem(
             scale = ClickableSurfaceDefaults.scale(focusedScale = 1.05f),
             modifier = Modifier
                 .fillMaxWidth()
-                .height(if (isPromo) 70.dp else 85.dp)
-                .onPreviewKeyEvent { event ->
+                .height(80.dp)
+                .onKeyEvent { event ->
                     if (event.type == KeyEventType.KeyDown) {
                         when (event.key) {
                             Key.DirectionRight -> { onRight(); true }
@@ -249,7 +236,6 @@ private fun ChannelItemContent(
     }
 }
 
-@OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun MovieItem(
     movie: Movie,
@@ -300,7 +286,6 @@ private fun MovieItemContent(movie: Movie, isFocused: Boolean) {
             contentScale = ContentScale.Crop
         )
         
-        // Gradiente para que el título se lea bien
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -334,7 +319,6 @@ private fun MovieItemContent(movie: Movie, isFocused: Boolean) {
     }
 }
 
-@OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun CategoryTab(
     name: String,
@@ -452,6 +436,229 @@ fun AccountInfoCard(viewModel: MainViewModel) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("Días restantes:", color = Color.White.copy(0.6f), fontSize = 13.sp)
                 Text("$daysLeft días", color = if(daysLeft <= 3) Color.Red else Color(0xFF00FF00), fontSize = 13.sp, fontWeight = FontWeight.Black)
+            }
+        }
+    }
+}
+
+@Composable
+fun UpdateDialog(
+    config: AppConfig,
+    isDownloading: Boolean,
+    progress: Float,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit
+) {
+    val focusRequester = remember { FocusRequester() }
+    
+    LaunchedEffect(Unit) {
+        if (!isDownloading) {
+            delay(500)
+            try { focusRequester.requestFocus() } catch (e: Exception) {}
+        }
+    }
+
+    Dialog(onDismissRequest = { if (!isDownloading) onDismiss() }) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(0.9f)
+                .clip(RoundedCornerShape(28.dp))
+                .background(Color(0xFF0F1115))
+                .border(2.dp, Color(0xFF00B4D8).copy(alpha = 0.3f), RoundedCornerShape(28.dp))
+                .padding(32.dp)
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(20.dp)
+            ) {
+                Icon(
+                    Icons.Default.SystemUpdate,
+                    contentDescription = null,
+                    tint = Color(0xFF00B4D8),
+                    modifier = Modifier.size(56.dp)
+                )
+
+                Text(
+                    text = "ACTUALIZACIÓN DISPONIBLE",
+                    color = Color.White,
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Black,
+                    textAlign = TextAlign.Center
+                )
+
+                Text(
+                    text = "Versión ${config.versionName}",
+                    color = Color(0xFF00B4D8),
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
+                )
+
+                if (!config.changeLog.isNullOrEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 100.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color.White.copy(alpha = 0.05f))
+                            .padding(12.dp)
+                    ) {
+                        Text(
+                            text = config.changeLog,
+                            color = Color.White.copy(alpha = 0.7f),
+                            fontSize = 14.sp
+                        )
+                    }
+                }
+
+                if (isDownloading) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        LinearProgressIndicator(
+                            progress = { progress },
+                            modifier = Modifier.fillMaxWidth().height(10.dp).clip(RoundedCornerShape(5.dp)),
+                            color = Color(0xFF00B4D8),
+                            trackColor = Color.White.copy(0.1f)
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text("DESCARGANDO... ${(progress * 100).toInt()}%", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    }
+                } else {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Button(
+                            onClick = onDismiss,
+                            modifier = Modifier.weight(1f).height(48.dp),
+                            colors = ButtonDefaults.colors(containerColor = Color.White.copy(0.1f)),
+                            shape = ButtonDefaults.shape(RoundedCornerShape(12.dp))
+                        ) {
+                            Text("MÁS TARDE", color = Color.White)
+                        }
+                        
+                        Button(
+                            onClick = onConfirm,
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(48.dp)
+                                .focusRequester(focusRequester),
+                            colors = ButtonDefaults.colors(containerColor = Color(0xFF00B4D8)),
+                            shape = ButtonDefaults.shape(RoundedCornerShape(12.dp))
+                        ) {
+                            Text("ACTUALIZAR", color = Color.Black, fontWeight = FontWeight.Black)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun GlobalMessageOverlay(message: GlobalMessage, onDismiss: () -> Unit) {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+        when (message.type) {
+            "marquee" -> {
+                MarqueeMessage(message.message)
+            }
+            "popup" -> {
+                PopupMessage(message.message, onDismiss)
+            }
+        }
+    }
+}
+
+@Composable
+fun MarqueeMessage(text: String) {
+    val infiniteTransition = rememberInfiniteTransition(label = "marquee")
+    
+    val xOffset by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = -1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 12000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "marquee_offset"
+    )
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(50.dp)
+            .background(Color.Black.copy(alpha = 0.75f))
+            .border(1.dp, Color(0xFF00B4D8).copy(0.4f))
+            .padding(vertical = 8.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        androidx.compose.ui.layout.Layout(
+            content = {
+                Text(
+                    text = text.uppercase(),
+                    color = Color.White,
+                    fontWeight = FontWeight.Black,
+                    fontSize = 20.sp,
+                    maxLines = 1,
+                    softWrap = false
+                )
+            }
+        ) { measurables, constraints ->
+            val placeable = measurables.first().measure(constraints.copy(minWidth = 0))
+            layout(constraints.maxWidth, constraints.maxHeight) {
+                val x = ((constraints.maxWidth + placeable.width) * xOffset / 2) + (constraints.maxWidth / 2) - (placeable.width / 2)
+                placeable.placeRelative(x.toInt(), 0)
+            }
+        }
+    }
+}
+
+@Composable
+fun PopupMessage(text: String, onDismiss: () -> Unit) {
+    val focusRequester = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        delay(300)
+        try { focusRequester.requestFocus() } catch(e: Exception) {}
+    }
+
+    Box(
+        modifier = Modifier.fillMaxSize().background(Color.Black.copy(0.6f)).clickable { onDismiss() },
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .width(550.dp)
+                .clip(RoundedCornerShape(24.dp))
+                .background(Color(0xFF16191E))
+                .border(2.dp, Color(0xFF00B4D8), RoundedCornerShape(24.dp))
+                .padding(32.dp)
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(Icons.Default.NotificationsActive, null, tint = Color(0xFF00B4D8), modifier = Modifier.size(56.dp))
+                Spacer(Modifier.height(20.dp))
+                Text(
+                    text = "MENSAJE DEL SISTEMA",
+                    color = Color(0xFF00B4D8),
+                    fontWeight = FontWeight.Black,
+                    fontSize = 14.sp,
+                    letterSpacing = 2.sp
+                )
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    text = text,
+                    color = Color.White,
+                    textAlign = TextAlign.Center,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    lineHeight = 28.sp
+                )
+                Spacer(Modifier.height(30.dp))
+                Button(
+                    onClick = onDismiss,
+                    modifier = Modifier.fillMaxWidth().height(50.dp).focusRequester(focusRequester),
+                    colors = ButtonDefaults.colors(containerColor = Color(0xFF00B4D8)),
+                    shape = ButtonDefaults.shape(RoundedCornerShape(12.dp))
+                ) {
+                    Text("ENTENDIDO", color = Color.Black, fontWeight = FontWeight.Black)
+                }
             }
         }
     }

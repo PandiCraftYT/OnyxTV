@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Ruta para archivos descargados por la app -->
+    <external-files-path name="my_downloads" path="Download" />
+    <external-files-path name="external_files" path="." />
+    <cache-path name="cache_files" path="." />
+    <!-- Ruta para el directorio público de Descargas -->
+    <external-path name="external_downloads" path="Download" />
+</paths>

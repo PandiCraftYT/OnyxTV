@@ -1,0 +1,461 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<issues format="6" by="lint 9.1.0" type="baseline" client="gradle" dependencies="false" name="AGP (9.1.0)" variant="all" version="9.1.0">
+
+    <issue
+        id="OldTargetApi"
+        message="Not targeting the latest versions of Android; compatibility modes apply. Consider testing and updating this version. Consult the `android.os.Build.VERSION_CODES` javadoc for details."
+        errorLine1="        targetSdk = 35 "
+        errorLine2="        ~~~~~~~~~~~~~~">
+        <location
+            file="build.gradle.kts"
+            line="15"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="AndroidGradlePluginVersion"
+        message="A newer version of com.android.application than 9.1.0 is available: 9.1.1"
+        errorLine1="agp = &quot;9.1.0&quot;"
+        errorLine2="      ~~~~~~~">
+        <location
+            file="$HOME/OneDrive/Documentos/GitHub/OnyxTV/OnyxTV/gradle/libs.versions.toml"
+            line="2"
+            column="7"/>
+    </issue>
+
+    <issue
+        id="GradleDependency"
+        message="A newer version of androidx.core:core-ktx than 1.10.1 is available: 1.18.0"
+        errorLine1="coreKtx = &quot;1.10.1&quot;"
+        errorLine2="          ~~~~~~~~">
+        <location
+            file="$HOME/OneDrive/Documentos/GitHub/OnyxTV/OnyxTV/gradle/libs.versions.toml"
+            line="3"
+            column="11"/>
+    </issue>
+
+    <issue
+        id="GradleDependency"
+        message="A newer version of androidx.appcompat:appcompat than 1.6.1 is available: 1.7.1"
+        errorLine1="appcompat = &quot;1.6.1&quot;"
+        errorLine2="            ~~~~~~~">
+        <location
+            file="$HOME/OneDrive/Documentos/GitHub/OnyxTV/OnyxTV/gradle/libs.versions.toml"
+            line="4"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="GradleDependency"
+        message="A newer version of androidx.compose:compose-bom than 2024.09.00 is available: 2026.03.01"
+        errorLine1="composeBom = &quot;2024.09.00&quot;"
+        errorLine2="             ~~~~~~~~~~~~">
+        <location
+            file="$HOME/OneDrive/Documentos/GitHub/OnyxTV/OnyxTV/gradle/libs.versions.toml"
+            line="6"
+            column="14"/>
+    </issue>
+
+    <issue
+        id="GradleDependency"
+        message="A newer version of androidx.tv:tv-foundation than 1.0.0-alpha07 is available: 1.0.0-rc01"
+        errorLine1="tvFoundation = &quot;1.0.0-alpha07&quot;"
+        errorLine2="               ~~~~~~~~~~~~~~~">
+        <location
+            file="$HOME/OneDrive/Documentos/GitHub/OnyxTV/OnyxTV/gradle/libs.versions.toml"
+            line="7"
+            column="16"/>
+    </issue>
+
+    <issue
+        id="GradleDependency"
+        message="A newer version of androidx.tv:tv-material than 1.0.0-alpha07 is available: 1.0.1"
+        errorLine1="tvMaterial = &quot;1.0.0-alpha07&quot;"
+        errorLine2="             ~~~~~~~~~~~~~~~">
+        <location
+            file="$HOME/OneDrive/Documentos/GitHub/OnyxTV/OnyxTV/gradle/libs.versions.toml"
+            line="8"
+            column="14"/>
+    </issue>
+
+    <issue
+        id="GradleDependency"
+        message="A newer version of androidx.lifecycle:lifecycle-runtime-ktx than 2.6.1 is available: 2.10.0"
+        errorLine1="lifecycleRuntimeKtx = &quot;2.6.1&quot;"
+        errorLine2="                      ~~~~~~~">
+        <location
+            file="$HOME/OneDrive/Documentos/GitHub/OnyxTV/OnyxTV/gradle/libs.versions.toml"
+            line="9"
+            column="23"/>
+    </issue>
+
+    <issue
+        id="GradleDependency"
+        message="A newer version of androidx.lifecycle:lifecycle-viewmodel-compose than 2.6.1 is available: 2.10.0"
+        errorLine1="lifecycleRuntimeKtx = &quot;2.6.1&quot;"
+        errorLine2="                      ~~~~~~~">
+        <location
+            file="$HOME/OneDrive/Documentos/GitHub/OnyxTV/OnyxTV/gradle/libs.versions.toml"
+            line="9"
+            column="23"/>
+    </issue>
+
+    <issue
+        id="GradleDependency"
+        message="A newer version of androidx.activity:activity-compose than 1.8.0 is available: 1.13.0"
+        errorLine1="activityCompose = &quot;1.8.0&quot;"
+        errorLine2="                  ~~~~~~~">
+        <location
+            file="$HOME/OneDrive/Documentos/GitHub/OnyxTV/OnyxTV/gradle/libs.versions.toml"
+            line="10"
+            column="19"/>
+    </issue>
+
+    <issue
+        id="GradleDependency"
+        message="A newer version of com.google.gms.google-services than 4.4.1 is available: 4.4.4"
+        errorLine1="googleServices = &quot;4.4.1&quot;"
+        errorLine2="                 ~~~~~~~">
+        <location
+            file="$HOME/OneDrive/Documentos/GitHub/OnyxTV/OnyxTV/gradle/libs.versions.toml"
+            line="11"
+            column="18"/>
+    </issue>
+
+    <issue
+        id="GradleDependency"
+        message="A newer version of com.google.firebase:firebase-bom than 32.8.0 is available: 34.12.0"
+        errorLine1="firebaseBom = &quot;32.8.0&quot;"
+        errorLine2="              ~~~~~~~~">
+        <location
+            file="$HOME/OneDrive/Documentos/GitHub/OnyxTV/OnyxTV/gradle/libs.versions.toml"
+            line="12"
+            column="15"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of org.videolan.android:libvlc-all than 3.6.0-eap5 is available: 3.7.0"
+        errorLine1="    implementation(&quot;org.videolan.android:libvlc-all:3.6.0-eap5&quot;)"
+        errorLine2="                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="build.gradle.kts"
+            line="63"
+            column="20"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of io.coil-kt:coil-compose than 2.5.0 is available: 2.7.0"
+        errorLine1="    implementation(&quot;io.coil-kt:coil-compose:2.5.0&quot;)"
+        errorLine2="                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="build.gradle.kts"
+            line="75"
+            column="20"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of io.coil-kt:coil-svg than 2.5.0 is available: 2.7.0"
+        errorLine1="    implementation(&quot;io.coil-kt:coil-svg:2.5.0&quot;)"
+        errorLine2="                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="build.gradle.kts"
+            line="76"
+            column="20"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of org.jetbrains.kotlinx:kotlinx-serialization-json than 1.6.3 is available: 1.11.0"
+        errorLine1="    implementation(&quot;org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3&quot;)"
+        errorLine2="                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="build.gradle.kts"
+            line="89"
+            column="20"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of org.jetbrains.kotlin.plugin.compose than 2.2.10 is available: 2.3.20"
+        errorLine1="kotlin = &quot;2.2.10&quot;"
+        errorLine2="         ~~~~~~~~">
+        <location
+            file="$HOME/OneDrive/Documentos/GitHub/OnyxTV/OnyxTV/gradle/libs.versions.toml"
+            line="5"
+            column="10"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of org.jetbrains.kotlin.plugin.serialization than 2.2.10 is available: 2.3.20"
+        errorLine1="kotlin = &quot;2.2.10&quot;"
+        errorLine2="         ~~~~~~~~">
+        <location
+            file="$HOME/OneDrive/Documentos/GitHub/OnyxTV/OnyxTV/gradle/libs.versions.toml"
+            line="5"
+            column="10"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of io.ktor:ktor-client-android than 3.0.1 is available: 3.4.2"
+        errorLine1="ktor = &quot;3.0.1&quot;"
+        errorLine2="       ~~~~~~~">
+        <location
+            file="$HOME/OneDrive/Documentos/GitHub/OnyxTV/OnyxTV/gradle/libs.versions.toml"
+            line="14"
+            column="8"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of io.ktor:ktor-client-cio than 3.0.1 is available: 3.4.2"
+        errorLine1="ktor = &quot;3.0.1&quot;"
+        errorLine2="       ~~~~~~~">
+        <location
+            file="$HOME/OneDrive/Documentos/GitHub/OnyxTV/OnyxTV/gradle/libs.versions.toml"
+            line="14"
+            column="8"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of io.ktor:ktor-client-core than 3.0.1 is available: 3.4.2"
+        errorLine1="ktor = &quot;3.0.1&quot;"
+        errorLine2="       ~~~~~~~">
+        <location
+            file="$HOME/OneDrive/Documentos/GitHub/OnyxTV/OnyxTV/gradle/libs.versions.toml"
+            line="14"
+            column="8"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of io.ktor:ktor-client-okhttp than 3.0.1 is available: 3.4.2"
+        errorLine1="ktor = &quot;3.0.1&quot;"
+        errorLine2="       ~~~~~~~">
+        <location
+            file="$HOME/OneDrive/Documentos/GitHub/OnyxTV/OnyxTV/gradle/libs.versions.toml"
+            line="14"
+            column="8"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of io.ktor:ktor-client-websockets than 3.0.1 is available: 3.4.2"
+        errorLine1="ktor = &quot;3.0.1&quot;"
+        errorLine2="       ~~~~~~~">
+        <location
+            file="$HOME/OneDrive/Documentos/GitHub/OnyxTV/OnyxTV/gradle/libs.versions.toml"
+            line="14"
+            column="8"/>
+    </issue>
+
+    <issue
+        id="ConfigurationScreenWidthHeight"
+        message="Using Configuration.screenWidthDp instead of LocalWindowInfo.current.containerSize"
+        errorLine1="    val isMobile = configuration.screenWidthDp &lt; 600"
+        errorLine2="                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/example/onyxapp/SplashScreen.kt"
+            line="31"
+            column="20"/>
+    </issue>
+
+    <issue
+        id="Aligned16KB"
+        message="The native library `arm64-v8a/libc++_shared.so` (from `org.videolan.android:libvlc-all:3.6.0-eap5`) is not 16 KB aligned"
+        errorLine1="    implementation(&quot;org.videolan.android:libvlc-all:3.6.0-eap5&quot;)"
+        errorLine2="                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="build.gradle.kts"
+            line="63"
+            column="20"/>
+    </issue>
+
+    <issue
+        id="Aligned16KB"
+        message="The native library `arm64-v8a/libc++_shared.so` (from `org.videolan.android:libvlc-all:3.6.0-eap5`) is not 16 KB aligned">
+        <location
+            file="$GRADLE_USER_HOME/caches/9.3.1/transforms/eb40024a37ff961f99f8e24e95e1a96d/workspace/transformed/libvlc-all-3.6.0-eap5/jni/arm64-v8a/libc++_shared.so"/>
+    </issue>
+
+    <issue
+        id="Aligned16KB"
+        message="The native library `arm64-v8a/libc++_shared.so` (from `org.videolan.android:libvlc-all:3.6.0-eap5`) is not 16 KB aligned">
+        <location
+            file="$GRADLE_USER_HOME/caches/9.3.1/transforms/eb40024a37ff961f99f8e24e95e1a96d/workspace/transformed/libvlc-all-3.6.0-eap5/jni/arm64-v8a/libc++_shared.so"/>
+    </issue>
+
+    <issue
+        id="DiscouragedApi"
+        message="Fixed screen orientations will be ignored in most cases, starting from Android 16. Android is moving toward a model where apps are expected to adapt to various orientations, display sizes, and aspect ratios."
+        errorLine1="            android:screenOrientation=&quot;fullUser&quot;"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/AndroidManifest.xml"
+            line="31"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="Unnecessary; `SDK_INT` is always >= 23"
+        errorLine1="        tools:targetApi=&quot;m&quot;>"
+        errorLine2="        ~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/AndroidManifest.xml"
+            line="26"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.drawable.ic_launcher_background` appears to be unused"
+        errorLine1="&lt;vector"
+        errorLine2="^">
+        <location
+            file="src/main/res/drawable/ic_launcher_background.xml"
+            line="2"
+            column="1"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.mipmap.ic_launcher_round` appears to be unused">
+        <location
+            file="src/main/res/mipmap-hdpi/ic_launcher_round.webp"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.style.Theme_OnyxApp` appears to be unused"
+        errorLine1="    &lt;style name=&quot;Theme.OnyxApp&quot; parent=&quot;Theme.AppCompat.DayNight.NoActionBar&quot; />"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/themes.xml"
+            line="3"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="IconLocation"
+        message="Found bitmap drawable `res/drawable/banner_tv.jpg` in densityless folder">
+        <location
+            file="src/main/res/drawable/banner_tv.jpg"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(&quot;https://www.instagram.com/carlosnvz_&quot;))"
+        errorLine2="                                                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/example/onyxapp/ui/components/LoginScreen.kt"
+            line="53"
+            column="53"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="            prefs.edit().putString(&quot;session&quot;, sessionString).apply()"
+        errorLine2="            ~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/example/onyxapp/SupabaseConfig.kt"
+            line="52"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        prefs.edit().remove(&quot;session&quot;).apply()"
+        errorLine2="        ~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/example/onyxapp/SupabaseConfig.kt"
+            line="76"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(&quot;https://www.instagram.com/carlosnvz_&quot;))"
+        errorLine2="                                                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/example/onyxapp/ui/components/UnauthorizedScreen.kt"
+            line="34"
+            column="53"/>
+    </issue>
+
+    <issue
+        id="UseTomlInstead"
+        message="Use version catalog instead"
+        errorLine1="    implementation(&quot;org.videolan.android:libvlc-all:3.6.0-eap5&quot;)"
+        errorLine2="                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="build.gradle.kts"
+            line="63"
+            column="20"/>
+    </issue>
+
+    <issue
+        id="UseTomlInstead"
+        message="Use version catalog instead"
+        errorLine1="    implementation(&quot;androidx.compose.material3:material3&quot;)"
+        errorLine2="                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="build.gradle.kts"
+            line="71"
+            column="20"/>
+    </issue>
+
+    <issue
+        id="UseTomlInstead"
+        message="Use version catalog instead"
+        errorLine1="    implementation(&quot;io.coil-kt:coil-compose:2.5.0&quot;)"
+        errorLine2="                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="build.gradle.kts"
+            line="75"
+            column="20"/>
+    </issue>
+
+    <issue
+        id="UseTomlInstead"
+        message="Use version catalog instead"
+        errorLine1="    implementation(&quot;io.coil-kt:coil-svg:2.5.0&quot;)"
+        errorLine2="                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="build.gradle.kts"
+            line="76"
+            column="20"/>
+    </issue>
+
+    <issue
+        id="UseTomlInstead"
+        message="Use version catalog instead"
+        errorLine1="    implementation(&quot;androidx.compose.material:material-icons-extended&quot;)"
+        errorLine2="                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="build.gradle.kts"
+            line="77"
+            column="20"/>
+    </issue>
+
+    <issue
+        id="UseTomlInstead"
+        message="Use version catalog instead"
+        errorLine1="    implementation(&quot;org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3&quot;)"
+        errorLine2="                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="build.gradle.kts"
+            line="89"
+            column="20"/>
+    </issue>
+
+</issues>

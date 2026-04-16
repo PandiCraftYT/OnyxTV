@@ -1,10 +1,16 @@
 package com.example.onyxapp
 
 import android.app.Application
+import android.app.DownloadManager
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.os.Environment
 import android.os.SystemClock
 import android.util.Log
 import androidx.compose.runtime.*
+import androidx.core.content.FileProvider
 import androidx.core.content.edit
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -12,16 +18,19 @@ import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.providers.builtin.Email
 import io.github.jan.supabase.auth.status.SessionStatus
 import io.github.jan.supabase.postgrest.postgrest
+import io.github.jan.supabase.postgrest.query.Order
 import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.channel
 import io.github.jan.supabase.realtime.decodeRecord
 import io.github.jan.supabase.realtime.postgresChangeFlow
 import io.github.jan.supabase.realtime.realtime
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.videolan.libvlc.MediaPlayer
+import java.io.File
 import java.net.URL
 import java.text.SimpleDateFormat
 import java.util.*
@@ -124,6 +133,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     var isFromPromoChannel = false
     var onShowLoginRequested: (() -> Unit)? = null
 
+    // --- Mensajería Global ---
+    var activeGlobalMessage by mutableStateOf<GlobalMessage?>(null)
+        private set
+    private var messageDismissJob: Job? = null
+
+    // --- Lógica de Actualización ---
+    var appUpdateConfig by mutableStateOf<AppConfig?>(null)
+        private set
+    var isDownloadingUpdate by mutableStateOf(false)
+        private set
+    var downloadProgress by mutableStateOf(0f)
+        private set
+
     private var networkOffset = 0L
     private var isTimeSynced = false
 
@@ -143,6 +165,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         startClock()
         loadUserFromCache()
         setupRealtime()
+        checkForUpdates()
 
         viewModelScope.launch {
             supabase.auth.sessionStatus.collect { status ->
@@ -169,6 +192,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             try {
                 supabase.realtime.connect()
+                
+                // --- CANALES ---
                 val myChannel = supabase.realtime.channel("public-channels")
                 val changeFlow = myChannel.postgresChangeFlow<PostgresAction>(schema = "public") {
                     table = "channels"
@@ -182,6 +207,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 myChannel.subscribe()
 
+                // --- PELÍCULAS ---
                 val moviesChannel = supabase.realtime.channel("public-movies")
                 val moviesFlow = moviesChannel.postgresChangeFlow<PostgresAction>(schema = "public") {
                     table = "movies"
@@ -190,6 +216,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     moviesFlow.collect { observeMovies() }
                 }
                 moviesChannel.subscribe()
+
+                // --- MENSAJES GLOBALES ---
+                val messagesChannel = supabase.realtime.channel("global-messages")
+                val messagesFlow = messagesChannel.postgresChangeFlow<PostgresAction>(schema = "public") {
+                    table = "global_messages"
+                }
+                launch {
+                    messagesFlow.collect { action ->
+                        withContext(Dispatchers.Main) {
+                            handleGlobalMessageAction(action)
+                        }
+                    }
+                }
+                messagesChannel.subscribe()
 
                 // --- ESCUCHAR CAMBIOS EN TABLA 'users' ---
                 supabase.auth.sessionStatus.collect { status ->
@@ -222,6 +262,51 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 Log.e("Onyx", "Error conectando Realtime", e)
             }
         }
+    }
+
+    private fun handleGlobalMessageAction(action: PostgresAction) {
+        try {
+            when (action) {
+                is PostgresAction.Insert -> {
+                    val msg = action.decodeRecord<GlobalMessage>()
+                    if (msg.isActive) showGlobalMessage(msg)
+                }
+                is PostgresAction.Update -> {
+                    val msg = action.decodeRecord<GlobalMessage>()
+                    if (msg.isActive) {
+                        showGlobalMessage(msg)
+                    } else if (activeGlobalMessage?.id == msg.id) {
+                        dismissGlobalMessage()
+                    }
+                }
+                is PostgresAction.Delete -> {
+                    val deletedId = action.oldRecord["id"]?.toString()?.toLongOrNull()
+                    if (activeGlobalMessage?.id == deletedId) {
+                        dismissGlobalMessage()
+                    }
+                }
+                else -> {}
+            }
+        } catch (e: Exception) {
+            Log.e("Onyx", "Error handling global message action", e)
+        }
+    }
+
+    private fun showGlobalMessage(msg: GlobalMessage) {
+        messageDismissJob?.cancel()
+        activeGlobalMessage = msg
+        
+        if (msg.durationSeconds > 0) {
+            messageDismissJob = viewModelScope.launch {
+                delay(msg.durationSeconds * 1000L)
+                activeGlobalMessage = null
+            }
+        }
+    }
+
+    fun dismissGlobalMessage() {
+        messageDismissJob?.cancel()
+        activeGlobalMessage = null
     }
 
     private fun handleDatabaseAction(action: PostgresAction) {
@@ -299,6 +384,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun playVideo(url: String, resetRetry: Boolean = true) {
         if (url.isEmpty()) return
+        // BLOQUEO: Si hay una alerta de actualización, no permitir reproducir
+        if (appUpdateConfig != null) {
+            Log.d("OnyxUpdate", "Reproducción bloqueada por actualización pendiente")
+            return
+        }
+
         if (url == "onyx://login") {
             isFromPromoChannel = true
             onShowLoginRequested?.invoke()
@@ -508,8 +599,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val user = supabase.auth.currentUserOrNull()
                 if (user != null) {
-                    // LIMPIAR deviceId en Supabase al cerrar sesión para liberar el slot
-                    // Se usa cast explícito a String? para evitar ambigüedad en set()
                     try {
                         supabase.postgrest["users"].update({
                             set("deviceId", null as String?)
@@ -659,6 +748,140 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 playVideo(currentList[skipIndex].url)
             } else {
                 playVideo(currentList[prevIndex].url)
+            }
+        }
+    }
+
+    // --- ACTUALIZACIONES OTA ---
+
+    private fun checkForUpdates() {
+        viewModelScope.launch {
+            try {
+                // Sincronización con la Tabla app_config: Obtenemos siempre la primera fila
+                val config = supabase.postgrest["app_config"].select {
+                    limit(1)
+                    order("id", Order.ASCENDING)
+                }.decodeSingleOrNull<AppConfig>()
+
+                if (config != null) {
+                    val currentVersionCode = try {
+                        val pInfo = getApplication<Application>().packageManager.getPackageInfo(getApplication<Application>().packageName, 0)
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) pInfo.longVersionCode else pInfo.versionCode.toLong()
+                    } catch (e: Exception) { 0L }
+
+                    if (config.versionCode > currentVersionCode) {
+                        Log.d("OnyxUpdate", "Nueva versión detectada: ${config.versionName}")
+                        appUpdateConfig = config
+                        // DETENER REPRODUCCIÓN: Si hay una actualización, parar el video actual
+                        stopPlayback()
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("OnyxUpdate", "Error checking for updates", e)
+            }
+        }
+    }
+
+    fun dismissUpdate() {
+        appUpdateConfig = null
+    }
+
+    fun downloadAndInstallUpdate() {
+        val config = appUpdateConfig ?: return
+        if (config.downloadUrl.isBlank()) {
+            Log.e("OnyxUpdate", "Error: URL de descarga vacía")
+            errorMessage = "URL de descarga no disponible"
+            return
+        }
+
+        Log.d("OnyxUpdate", "Iniciando proceso para: ${config.downloadUrl}")
+        isDownloadingUpdate = true
+        val context = getApplication<Application>()
+        val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+        
+        // Usamos el directorio público de descargas para evitar restricciones de MediaProvider con DownloadManager
+        val updateFile = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "onyxtv_update.apk")
+        if (updateFile.exists()) {
+            Log.d("OnyxUpdate", "Borrando APK vieja")
+            updateFile.delete()
+        }
+
+        try {
+            val uri = Uri.parse(config.downloadUrl.trim())
+            val request = DownloadManager.Request(uri)
+                .setTitle("Onyx TV Update")
+                .setDescription("Actualizando a ${config.versionName}")
+                .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "onyxtv_update.apk")
+                .setAllowedOverMetered(true)
+                .setAllowedOverRoaming(true)
+
+            val downloadId = downloadManager.enqueue(request)
+            Log.d("OnyxUpdate", "Download ID: $downloadId")
+
+            viewModelScope.launch(Dispatchers.IO) {
+                var downloaded = false
+                while (!downloaded) {
+                    val query = DownloadManager.Query().setFilterById(downloadId)
+                    val cursor = downloadManager.query(query)
+                    if (cursor != null && cursor.moveToFirst()) {
+                        val statusCol = cursor.getColumnIndex(DownloadManager.COLUMN_STATUS)
+                        if (statusCol != -1) {
+                            val status = cursor.getInt(statusCol)
+                            
+                            // Progreso
+                            val bytesCol = cursor.getColumnIndex(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR)
+                            val totalCol = cursor.getColumnIndex(DownloadManager.COLUMN_TOTAL_SIZE_BYTES)
+                            if (bytesCol != -1 && totalCol != -1) {
+                                val bytesDownloaded = cursor.getLong(bytesCol)
+                                val bytesTotal = cursor.getLong(totalCol)
+                                if (bytesTotal > 0) {
+                                    downloadProgress = bytesDownloaded.toFloat() / bytesTotal.toFloat()
+                                }
+                            }
+
+                            if (status == DownloadManager.STATUS_SUCCESSFUL) {
+                                downloaded = true
+                                withContext(Dispatchers.Main) {
+                                    isDownloadingUpdate = false
+                                    installApk(context)
+                                }
+                            } else if (status == DownloadManager.STATUS_FAILED) {
+                                downloaded = true
+                                withContext(Dispatchers.Main) {
+                                    isDownloadingUpdate = false
+                                    errorMessage = "Error en la descarga. Verifica la URL."
+                                }
+                            }
+                        }
+                    } else {
+                        downloaded = true
+                        withContext(Dispatchers.Main) { isDownloadingUpdate = false }
+                    }
+                    cursor?.close()
+                    delay(800)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("OnyxUpdate", "Error crítico", e)
+            isDownloadingUpdate = false
+            errorMessage = "No se pudo iniciar descarga."
+        }
+    }
+
+    private fun installApk(context: Context) {
+        val file = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "onyxtv_update.apk")
+        if (file.exists()) {
+            try {
+                val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+                val intent = Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(uri, "application/vnd.android.package-archive")
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(intent)
+            } catch (e: Exception) {
+                Log.e("OnyxUpdate", "Error instalador", e)
             }
         }
     }

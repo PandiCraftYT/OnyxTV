@@ -79,6 +79,17 @@ class MainActivity : ComponentActivity() {
             }
 
             OnyxAppTheme {
+                // Diálogo de actualización
+                viewModel.appUpdateConfig?.let { config ->
+                    UpdateDialog(
+                        config = config,
+                        isDownloading = viewModel.isDownloadingUpdate,
+                        progress = viewModel.downloadProgress,
+                        onDismiss = { viewModel.dismissUpdate() },
+                        onConfirm = { viewModel.downloadAndInstallUpdate() }
+                    )
+                }
+
                 if (showSplash) {
                     SplashScreen(onFinished = { showSplash = false })
                 } else {
@@ -104,6 +115,11 @@ class MainActivity : ComponentActivity() {
                             })
                         }
                     }
+                }
+
+                // Mensajes Globales Overlay
+                viewModel.activeGlobalMessage?.let { message ->
+                    GlobalMessageOverlay(message = message, onDismiss = { viewModel.dismissGlobalMessage() })
                 }
             }
         }
@@ -399,7 +415,6 @@ fun MainScreen(viewModel: MainViewModel, onLoginRequest: () -> Unit) {
                                         items(filteredMovies) { movie ->
                                             MovieItem(movie = movie, isMobile = true, onClick = {
                                                 resetTimer()
-                                                // CÁMBIALO AQUÍ: Quita el let y usa video_url directo
                                                 viewModel.playVideo(movie.video_url)
                                             }, onFocus = { resetTimer() })
                                         }
@@ -493,7 +508,6 @@ fun MainScreen(viewModel: MainViewModel, onLoginRequest: () -> Unit) {
                                             items(filteredMovies) { movie ->
                                                 MovieItem(movie = movie, isMobile = false, onClick = {
                                                     resetTimer()
-                                                    // CÁMBIALO AQUÍ: Quita el let y usa video_url directo
                                                     viewModel.playVideo(movie.video_url)
                                                 }, onFocus = { resetTimer() })
                                             }

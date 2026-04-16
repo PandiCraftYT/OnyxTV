@@ -2,7 +2,6 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
-    // Supabase no requiere plugin de google-services a menos que uses Push
 }
 
 android {
@@ -16,31 +15,31 @@ android {
         versionCode = 3
         versionName = "1.2"
 
+        // OPTIMIZACIÓN: Solo dejamos arquitecturas de TV (ARM)
+        // Esto quita las librerías x86 de VLC que pesan muchísimo
         ndk {
-            abiFilters.addAll(listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64"))
+            abiFilters.addAll(listOf("armeabi-v7a", "arm64-v8a"))
         }
     }
 
     packaging {
         jniLibs {
+            // OPTIMIZACIÓN: Permitir compresión de librerías nativas
             useLegacyPackaging = true
+        }
+        resources {
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = true
-            isShrinkResources = true
+            isMinifyEnabled = true // Ya lo tenías, ayuda a quitar código muerto
+            isShrinkResources = true // Ya lo tenías, ayuda a quitar recursos no usados
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-        }
-    }
-    
-    splits {
-        abi {
-            isEnable = false
         }
     }
 
@@ -60,6 +59,7 @@ android {
 
 dependencies {
     implementation(libs.androidx.core.ktx)
+    // VLC es el componente más pesado. Al filtrar ABIs arriba, solo se incluirá lo necesario.
     implementation("org.videolan.android:libvlc-all:3.6.0-eap5")
     implementation(libs.androidx.appcompat)
     implementation(platform(libs.androidx.compose.bom))
