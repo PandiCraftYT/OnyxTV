@@ -10,6 +10,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
@@ -18,13 +20,18 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
@@ -39,11 +46,11 @@ fun LoginScreen(viewModel: MainViewModel, onDismiss: () -> Unit) {
     var passVisible by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val configuration = LocalConfiguration.current
-    
+
     LaunchedEffect(Unit) {
         viewModel.stopPlayback()
     }
-    
+
     val isPortrait = configuration.orientation == android.content.res.Configuration.ORIENTATION_PORTRAIT
     val scrollState = rememberScrollState()
     val showPromo = viewModel.isFromPromoChannel || !viewModel.isUserAuthenticated
@@ -53,7 +60,7 @@ fun LoginScreen(viewModel: MainViewModel, onDismiss: () -> Unit) {
             val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.instagram.com/carlosnvz_"))
             context.startActivity(intent)
         } catch (e: Exception) {
-            Toast.makeText(context, "No se pudo abrir el enlace", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "No se pudo abrir el enlace en este dispositivo", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -134,7 +141,7 @@ fun LoginScreen(viewModel: MainViewModel, onDismiss: () -> Unit) {
 @Composable
 fun PromoCard(modifier: Modifier, onContactClick: () -> Unit) {
     var isFocused by remember { mutableStateOf(false) }
-    
+
     Card(
         modifier = modifier
             .onFocusChanged { isFocused = it.isFocused }
@@ -152,16 +159,16 @@ fun PromoCard(modifier: Modifier, onContactClick: () -> Unit) {
             Spacer(Modifier.height(16.dp))
             Text("ONYX PREMIUM", fontSize = 26.sp, fontWeight = FontWeight.Black, color = Color.White)
             Spacer(Modifier.height(24.dp))
-            
+
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 PromoItem("Más de 60 Canales en Vivo")
                 PromoItem("Calidad Full HD y 4K")
                 PromoItem("Sin anuncios ni interrupciones")
                 PromoItem("Soporte 24/7 Personalizado")
             }
-            
+
             Spacer(Modifier.weight(1f))
-            
+
             Text(
                 "Para contratar el servicio Premium contacta por Instagram:",
                 color = Color.White.copy(0.6f),
@@ -199,9 +206,16 @@ fun LoginForm(
     onDismiss: () -> Unit
 ) {
     val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current // Controlador de Teclado
+
+    // MEJORA 1: FocusRequesters para guiar el camino en la TV
+    val passFocusRequester = remember { FocusRequester() }
+    val loginButtonFocusRequester = remember { FocusRequester() }
+
     var isFormFocused by remember { mutableStateOf(false) }
     var isUserFocused by remember { mutableStateOf(false) }
     var isPassFocused by remember { mutableStateOf(false) }
+    var isButtonFocused by remember { mutableStateOf(false) } // Para que el botón de login brille al seleccionarlo
 
     val fieldColors = TextFieldDefaults.colors(
         focusedTextColor = Color.White,
@@ -228,9 +242,10 @@ fun LoginForm(
         ) {
             Text("BIENVENIDO", fontSize = 28.sp, fontWeight = FontWeight.Black, color = Color.White)
             Text("Ingresa a tu cuenta", color = Color.White.copy(0.5f), fontSize = 15.sp)
-            
+
             Spacer(Modifier.height(32.dp))
 
+            // CAMPO DE USUARIO
             OutlinedTextField(
                 value = user,
                 onValueChange = onUserChange,
@@ -241,17 +256,30 @@ fun LoginForm(
                 leadingIcon = { Icon(Icons.Default.Person, null, tint = if (isUserFocused) Color(0xFF00B4D8) else Color.White.copy(0.6f)) },
                 singleLine = true,
                 shape = RoundedCornerShape(14.dp),
-                colors = fieldColors
+                colors = fieldColors,
+                // MEJORA 2: Teclado con botón "Siguiente"
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Email,
+                    imeAction = ImeAction.Next
+                ),
+                keyboardActions = KeyboardActions(
+                    onNext = {
+                        // Al presionar siguiente, envía el foco a la contraseña
+                        passFocusRequester.requestFocus()
+                    }
+                )
             )
 
             Spacer(Modifier.height(16.dp))
 
+            // CAMPO DE CONTRASEÑA
             OutlinedTextField(
                 value = pass,
                 onValueChange = onPassChange,
                 label = { Text("Contraseña") },
                 modifier = Modifier
                     .fillMaxWidth()
+                    .focusRequester(passFocusRequester) // Engancha el requester aquí
                     .onFocusChanged { isPassFocused = it.isFocused },
                 leadingIcon = { Icon(Icons.Default.Lock, null, tint = if (isPassFocused) Color(0xFF00B4D8) else Color.White.copy(0.6f)) },
                 trailingIcon = {
@@ -262,7 +290,19 @@ fun LoginForm(
                 visualTransformation = if (passVisible) VisualTransformation.None else PasswordVisualTransformation(),
                 singleLine = true,
                 shape = RoundedCornerShape(14.dp),
-                colors = fieldColors
+                colors = fieldColors,
+                // MEJORA 3: Teclado con botón "Hecho" (Enter)
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Password,
+                    imeAction = ImeAction.Done
+                ),
+                keyboardActions = KeyboardActions(
+                    onDone = {
+                        // Oculta el teclado y salta directo al botón de Iniciar Sesión
+                        keyboardController?.hide()
+                        loginButtonFocusRequester.requestFocus()
+                    }
+                )
             )
 
             AnimatedVisibility(visible = authError != null) {
@@ -280,18 +320,27 @@ fun LoginForm(
 
             Spacer(Modifier.height(32.dp))
 
+            // BOTÓN DE LOGIN
             Button(
-                onClick = { 
+                onClick = {
+                    keyboardController?.hide() // Asegura ocultar teclado si lo tocan en celular
                     focusManager.clearFocus()
-                    onLogin() 
+                    onLogin()
                 },
-                modifier = Modifier.fillMaxWidth().height(56.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00B4D8)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)
+                    .focusRequester(loginButtonFocusRequester) // Engancha el requester aquí
+                    .onFocusChanged { isButtonFocused = it.isFocused }, // Escucha si el TV D-pad está aquí
+                // Cambiamos el color sutilmente si el control de TV lo está apuntando
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (isButtonFocused) Color(0xFF00E5FF) else Color(0xFF00B4D8)
+                ),
                 shape = RoundedCornerShape(14.dp),
                 enabled = !isAuthLoading
             ) {
-                if (isAuthLoading) CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
-                else Text("INICIAR SESIÓN", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                if (isAuthLoading) CircularProgressIndicator(color = Color.Black, modifier = Modifier.size(24.dp))
+                else Text("INICIAR SESIÓN", color = Color.Black, fontWeight = FontWeight.Black, fontSize = 16.sp)
             }
 
             TextButton(onClick = onDismiss, modifier = Modifier.padding(top = 16.dp)) {

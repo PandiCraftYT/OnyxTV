@@ -16,15 +16,19 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -39,7 +43,10 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -67,9 +74,7 @@ class MainActivity : ComponentActivity() {
             var forceShowLogin by remember { mutableStateOf(false) }
 
             LaunchedEffect(Unit) {
-                viewModel.onShowLoginRequested = {
-                    forceShowLogin = true
-                }
+                viewModel.onShowLoginRequested = { forceShowLogin = true }
             }
 
             LaunchedEffect(viewModel.isUserAuthenticated) {
@@ -80,7 +85,6 @@ class MainActivity : ComponentActivity() {
             }
 
             OnyxAppTheme {
-                // Diálogo de actualización
                 viewModel.appUpdateConfig?.let { config ->
                     UpdateDialog(
                         config = config,
@@ -118,7 +122,6 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                // Mensajes Globales Overlay
                 viewModel.activeGlobalMessage?.let { message ->
                     GlobalMessageOverlay(message = message, onDismiss = { viewModel.dismissGlobalMessage() })
                 }
@@ -127,6 +130,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+// ... [Mantén tus overlays VideoControlsOverlay y VideoStatusOverlay exactamente igual] ...
 @Composable
 fun VideoControlsOverlay(
     isPlaying: Boolean,
@@ -142,49 +146,22 @@ fun VideoControlsOverlay(
         enter = fadeIn() + slideInVertically { it },
         exit = fadeOut() + slideOutVertically { it }
     ) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.BottomCenter
-        ) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color.Black.copy(alpha = 0.6f))
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                modifier = Modifier.fillMaxWidth().background(Color.Black.copy(alpha = 0.6f)).padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                    IconButton(onClick = onTogglePause) {
-                        Icon(if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, null, tint = Color.White)
-                    }
-                    IconButton(onClick = onNext) {
-                        Icon(Icons.Default.SkipNext, null, tint = Color.White)
-                    }
+                    IconButton(onClick = onTogglePause) { Icon(if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, null, tint = Color.White) }
+                    IconButton(onClick = onNext) { Icon(Icons.Default.SkipNext, null, tint = Color.White) }
                     Spacer(Modifier.width(8.dp))
-                    Text(
-                        text = title.uppercase(),
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    Text(text = title.uppercase(), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
-
                 Box(modifier = Modifier.weight(0.5f), contentAlignment = Alignment.Center) {
-                    Text(
-                        text = "LIVE",
-                        color = Color.Red,
-                        fontWeight = FontWeight.Black,
-                        fontSize = 14.sp
-                    )
+                    Text(text = "LIVE", color = Color.Red, fontWeight = FontWeight.Black, fontSize = 14.sp)
                 }
-
                 Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
-                    IconButton(onClick = onFullScreen) {
-                        Icon(if (isFullScreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen, null, tint = Color.White)
-                    }
+                    IconButton(onClick = onFullScreen) { Icon(if (isFullScreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen, null, tint = Color.White) }
                 }
             }
         }
@@ -211,20 +188,35 @@ fun MainScreen(viewModel: MainViewModel, onLoginRequest: () -> Unit) {
     val isTV = remember { context.packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK) || context.packageManager.hasSystemFeature("android.hardware.type.television") }
     val isMobile = !isTV
 
+    // Controladores de sistema para Mobile y TV
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+
     var isFullScreen by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(true) }
     var showVideoControls by remember { mutableStateOf(false) }
     val activity = context as? Activity
 
-    // Disparador para resetear el timer de inactividad
     var userActivityTrigger by remember { mutableLongStateOf(0L) }
     val resetTimer = { userActivityTrigger = System.currentTimeMillis() }
 
+    // Estados de scroll independientes para no perder la posición al cambiar de pestaña
+    val listState = rememberLazyListState()
+    val gridState = rememberLazyGridState()
+
+    // MEJORA 1: Gestores de Foco dedicados para guiar el control remoto
+    val initialFocusRequester = remember { FocusRequester() }
+    val searchFocusRequester = remember { FocusRequester() }
+    val listFocusRequester = remember { FocusRequester() } // Foco para el primer elemento de la lista
+
+    var isSearchActiveMain by remember { mutableStateOf(false) }
+
+    val filteredChannels = viewModel.filteredChannels
+    val filteredMovies = viewModel.filteredMovies
+    val currentChannelUrl = viewModel.currentChannelUrl
+
     LaunchedEffect(showVideoControls) {
-        if (showVideoControls) {
-            delay(5000)
-            showVideoControls = false
-        }
+        if (showVideoControls) { delay(5000); showVideoControls = false }
     }
 
     LaunchedEffect(isFullScreen, isMobile) {
@@ -246,16 +238,20 @@ fun MainScreen(viewModel: MainViewModel, onLoginRequest: () -> Unit) {
 
     val categories = remember(viewModel.isUserAuthenticated) {
         val list = mutableListOf("LIVE")
-        if (viewModel.isUserAuthenticated) {
-            list.add("PELÍCULAS")
-            list.add("AJUSTES")
-        }
-        if (!viewModel.isUserAuthenticated) {
-            if (isTV) list.add("ACCEDER") else list.add("INICIAR SESIÓN")
-        }
+        if (viewModel.isUserAuthenticated) { list.add("PELÍCULAS"); list.add("AJUSTES") }
+        if (!viewModel.isUserAuthenticated) { if (isTV) list.add("ACCEDER") else list.add("INICIAR SESIÓN") }
         list
     }
+
     var selectedCategory by remember { mutableStateOf("LIVE") }
+
+    // MEJORA 2: Cuando se cambia de categoría en TV, automáticamente enfocar el contenido debajo
+    LaunchedEffect(selectedCategory) {
+        if (isTV && selectedCategory != "AJUSTES") {
+            delay(100) // Pequeño retraso para que Compose renderice la nueva lista
+            try { listFocusRequester.requestFocus() } catch (e: Exception) {}
+        }
+    }
 
     LaunchedEffect(viewModel.isUserAuthenticated) {
         if (!viewModel.isUserAuthenticated && (selectedCategory == "AJUSTES" || selectedCategory == "PELÍCULAS")) {
@@ -263,20 +259,8 @@ fun MainScreen(viewModel: MainViewModel, onLoginRequest: () -> Unit) {
         }
     }
 
-    val listState = rememberLazyListState()
-    val initialFocusRequester = remember { FocusRequester() }
-    val searchFocusRequester = remember { FocusRequester() }
-    var isSearchActiveMain by remember { mutableStateOf(false) }
-
-    val filteredChannels = viewModel.filteredChannels
-    val filteredMovies = viewModel.filteredMovies
-    val currentChannelUrl = viewModel.currentChannelUrl
-
     LaunchedEffect(showMenu, userActivityTrigger) {
-        if (isTV && showMenu) {
-            delay(15000)
-            showMenu = false
-        }
+        if (isTV && showMenu) { delay(15000); showMenu = false }
     }
 
     LaunchedEffect(showMenu) {
@@ -284,13 +268,9 @@ fun MainScreen(viewModel: MainViewModel, onLoginRequest: () -> Unit) {
             delay(300)
             if (selectedCategory == "LIVE" && currentChannelUrl.isNotEmpty()) {
                 val index = filteredChannels.indexOfFirst { it.url == currentChannelUrl }
-                if (index >= 0) {
-                    try { listState.scrollToItem(index) } catch(e: Exception) {}
-                }
+                if (index >= 0) { try { listState.scrollToItem(index) } catch(e: Exception) {} }
             }
-            try {
-                initialFocusRequester.requestFocus()
-            } catch (e: Exception) {}
+            try { initialFocusRequester.requestFocus() } catch (e: Exception) {}
         }
     }
 
@@ -309,16 +289,9 @@ fun MainScreen(viewModel: MainViewModel, onLoginRequest: () -> Unit) {
         if (!isTV) return@onPreviewKeyEvent false
         resetTimer()
         if (event.type == KeyEventType.KeyDown) {
-            val isCenterKey = event.nativeKeyEvent.keyCode in listOf(
-                KeyEvent.KEYCODE_DPAD_CENTER,
-                KeyEvent.KEYCODE_ENTER,
-                KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE
-            )
+            val isCenterKey = event.nativeKeyEvent.keyCode in listOf(KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
             if (isCenterKey) {
-                if (!showMenu) {
-                    showMenu = true
-                    return@onPreviewKeyEvent true
-                }
+                if (!showMenu) { showMenu = true; return@onPreviewKeyEvent true }
             } else if (!showMenu) {
                 when (event.nativeKeyEvent.keyCode) {
                     KeyEvent.KEYCODE_DPAD_UP -> { viewModel.zapNext(); return@onPreviewKeyEvent true }
@@ -341,26 +314,17 @@ fun MainScreen(viewModel: MainViewModel, onLoginRequest: () -> Unit) {
 
         Box(modifier = videoModifier.clickable {
             resetTimer()
-            if (isTV) showMenu = !showMenu
-            else showVideoControls = !showVideoControls
+            if (isTV) showMenu = !showMenu else showVideoControls = !showVideoControls
         }) {
             viewModel.mediaPlayer?.let { player -> VideoPlayer(player, Modifier.fillMaxSize()) }
             VideoStatusOverlay(viewModel.isLoading, errorMessage = viewModel.errorMessage)
 
             if (isMobile || isFullScreen) {
                 VideoControlsOverlay(
-                    isPlaying = viewModel.isPlaying,
-                    title = viewModel.currentPlaybackTitle,
-                    onTogglePause = { resetTimer(); viewModel.togglePause() },
-                    onNext = { resetTimer(); viewModel.zapNext() },
-                    onFullScreen = {
-                        resetTimer()
-                        if (isFullScreen) { isFullScreen = false; showMenu = true }
-                        else { isFullScreen = true; showMenu = false }
-                        showVideoControls = false
-                    },
-                    isFullScreen = isFullScreen,
-                    visible = showVideoControls
+                    isPlaying = viewModel.isPlaying, title = viewModel.currentPlaybackTitle,
+                    onTogglePause = { resetTimer(); viewModel.togglePause() }, onNext = { resetTimer(); viewModel.zapNext() },
+                    onFullScreen = { resetTimer(); if (isFullScreen) { isFullScreen = false; showMenu = true } else { isFullScreen = true; showMenu = false }; showVideoControls = false },
+                    isFullScreen = isFullScreen, visible = showVideoControls
                 )
             }
         }
@@ -372,33 +336,29 @@ fun MainScreen(viewModel: MainViewModel, onLoginRequest: () -> Unit) {
                     Column(modifier = Modifier.fillMaxWidth().weight(1f).background(Color(0xFF0A0E12)).padding(horizontal = 16.dp)) {
                         Text(
                             text = if (viewModel.isUserAuthenticated) "ONYX TV - PREMIUM" else "ONYX TV - GRATIS",
-                            fontWeight = FontWeight.Black,
-                            color = if (viewModel.isUserAuthenticated) Color(0xFFFFD700) else Color(0xFFC0C0C0),
-                            fontSize = 18.sp,
-                            modifier = Modifier.padding(vertical = 12.dp).align(Alignment.CenterHorizontally)
+                            fontWeight = FontWeight.Black, color = if (viewModel.isUserAuthenticated) Color(0xFFFFD700) else Color(0xFFC0C0C0),
+                            fontSize = 18.sp, modifier = Modifier.padding(vertical = 12.dp).align(Alignment.CenterHorizontally)
                         )
+
+                        // MEJORA 3: KeyboardActions en Móvil para ocultar el teclado limpiamente
                         TextField(
                             value = viewModel.searchQuery,
-                            onValueChange = { 
-                                resetTimer()
-                                viewModel.updateSearchQuery(it) 
-                            },
+                            onValueChange = { resetTimer(); viewModel.updateSearchQuery(it) },
                             placeholder = { Text("Buscar...", color = Color.Gray) },
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(12.dp),
-                            colors = TextFieldDefaults.colors(
-                                focusedContainerColor = Color.White.copy(0.05f),
-                                unfocusedContainerColor = Color.White.copy(0.05f),
-                                focusedTextColor = Color.White, unfocusedTextColor = Color.White
-                            ),
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                            keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus(); keyboardController?.hide() }),
+                            colors = TextFieldDefaults.colors(focusedContainerColor = Color.White.copy(0.05f), unfocusedContainerColor = Color.White.copy(0.05f), focusedTextColor = Color.White, unfocusedTextColor = Color.White),
                             leadingIcon = { Icon(Icons.Default.Search, null, tint = Color(0xFF00B4D8)) }
                         )
+
                         Spacer(Modifier.height(12.dp))
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             itemsIndexed(categories) { _, cat ->
-                                CategoryTab(name = cat, isSelected = selectedCategory == cat, isMobile = true) { 
+                                CategoryTab(name = cat, isSelected = selectedCategory == cat, isMobile = true) {
                                     resetTimer()
-                                    if (cat == "INICIAR SESIÓN") onLoginRequest() else selectedCategory = cat 
+                                    if (cat == "INICIAR SESIÓN") onLoginRequest() else selectedCategory = cat
                                 }
                             }
                         }
@@ -408,18 +368,13 @@ fun MainScreen(viewModel: MainViewModel, onLoginRequest: () -> Unit) {
                                 "AJUSTES" -> SettingsPanel(viewModel) { resetTimer() }
                                 "PELÍCULAS" -> {
                                     LazyVerticalGrid(
-                                        columns = GridCells.Fixed(3),
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                                        contentPadding = PaddingValues(bottom = 32.dp)
+                                        state = gridState,
+                                        columns = GridCells.Fixed(3), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 32.dp)
                                     ) {
                                         items(filteredMovies) { movie ->
                                             MovieItem(movie = movie, isMobile = true, onClick = {
                                                 resetTimer()
-                                                val intent = Intent(context, MoviePlayerActivity::class.java).apply {
-                                                    putExtra("MOVIE_URL", movie.video_url)
-                                                    putExtra("MOVIE_TITLE", movie.title)
-                                                }
+                                                val intent = Intent(context, MoviePlayerActivity::class.java).apply { putExtra("MOVIE_URL", movie.video_url); putExtra("MOVIE_TITLE", movie.title) }
                                                 context.startActivity(intent)
                                             }, onFocus = { resetTimer() })
                                         }
@@ -443,14 +398,7 @@ fun MainScreen(viewModel: MainViewModel, onLoginRequest: () -> Unit) {
                         val columnWeight = 0.42f
                         Column(modifier = Modifier.weight(columnWeight).fillMaxHeight().background(Brush.horizontalGradient(listOf(Color.Black.copy(0.9f), Color.Transparent))).padding(start = 40.dp, top = 25.dp, end = 20.dp)) {
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                Column {
-                                    Text(
-                                        text = if (viewModel.isUserAuthenticated) "ONYX TV - PREMIUM" else "ONYX TV - GRATIS",
-                                        style = MaterialTheme.typography.headlineSmall,
-                                        color = if (viewModel.isUserAuthenticated) Color(0xFFFFD700) else Color(0xFFC0C0C0),
-                                        fontWeight = FontWeight.Black
-                                    )
-                                }
+                                Column { Text(text = if (viewModel.isUserAuthenticated) "ONYX TV - PREMIUM" else "ONYX TV - GRATIS", style = MaterialTheme.typography.headlineSmall, color = if (viewModel.isUserAuthenticated) Color(0xFFFFD700) else Color(0xFFC0C0C0), fontWeight = FontWeight.Black) }
                                 Column(horizontalAlignment = Alignment.End) {
                                     Text(viewModel.currentTime, color = Color.White.copy(0.9f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                                     Text(viewModel.currentDate, color = Color.White.copy(0.6f), style = MaterialTheme.typography.labelSmall)
@@ -464,18 +412,20 @@ fun MainScreen(viewModel: MainViewModel, onLoginRequest: () -> Unit) {
                                         modifier = Modifier.fillMaxWidth().height(42.dp).clip(RoundedCornerShape(12.dp)).background(Color.White.copy(0.05f)).border(1.dp, Color.White.copy(0.1f), RoundedCornerShape(12.dp)).clickable { resetTimer(); isSearchActiveMain = true }.padding(horizontal = 16.dp),
                                         contentAlignment = Alignment.CenterStart
                                     ) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Icon(Icons.Default.Search, null, tint = Color(0xFF00B4D8), modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("Buscar...", color = Color.White.copy(0.3f), fontSize = 13.sp)
-                                        }
+                                        Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.Search, null, tint = Color(0xFF00B4D8), modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("Buscar...", color = Color.White.copy(0.3f), fontSize = 13.sp) }
                                     }
                                 } else {
+                                    // MEJORA 4: Manejo de teclado robusto para TV
                                     TextField(
                                         value = viewModel.searchQuery,
-                                        onValueChange = {
-                                            resetTimer()
-                                            viewModel.updateSearchQuery(it)
-                                        },
+                                        onValueChange = { resetTimer(); viewModel.updateSearchQuery(it) },
                                         placeholder = { Text("Buscar...", fontSize = 13.sp) },
+                                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                                        keyboardActions = KeyboardActions(onSearch = {
+                                            // Cuando se presiona la lupa o enter en el teclado de la TV
+                                            keyboardController?.hide()
+                                            try { listFocusRequester.requestFocus() } catch(e:Exception){}
+                                        }),
                                         modifier = Modifier.fillMaxWidth().height(48.dp).focusRequester(searchFocusRequester).onFocusChanged {
                                             resetTimer()
                                             if (!it.isFocused && viewModel.searchQuery.isEmpty()) isSearchActiveMain = false
@@ -490,8 +440,7 @@ fun MainScreen(viewModel: MainViewModel, onLoginRequest: () -> Unit) {
                             LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(vertical = 10.dp, horizontal = 4.dp)) {
                                 itemsIndexed(categories) { _, cat ->
                                     CategoryTab(
-                                        name = cat,
-                                        isSelected = selectedCategory == cat,
+                                        name = cat, isSelected = selectedCategory == cat,
                                         modifier = if (cat == selectedCategory) Modifier.focusRequester(initialFocusRequester) else Modifier
                                     ) {
                                         resetTimer()
@@ -500,25 +449,26 @@ fun MainScreen(viewModel: MainViewModel, onLoginRequest: () -> Unit) {
                                 }
                             }
                             Spacer(Modifier.height(10.dp))
-                            Box(modifier = Modifier.weight(1f)) {
+
+                            // MEJORA 5: Agrupar el foco (focusGroup) de las listas para que el D-pad no escape hacia arriba fácilmente
+                            Box(modifier = Modifier.weight(1f).focusGroup()) {
                                 when (selectedCategory) {
                                     "AJUSTES" -> SettingsPanel(viewModel) { resetTimer() }
                                     "PELÍCULAS" -> {
                                         LazyVerticalGrid(
-                                            columns = GridCells.Fixed(3),
-                                            horizontalArrangement = Arrangement.spacedBy(15.dp),
-                                            verticalArrangement = Arrangement.spacedBy(20.dp),
-                                            contentPadding = PaddingValues(bottom = 50.dp)
+                                            state = gridState, // Mantiene la posición del scroll
+                                            columns = GridCells.Fixed(3), horizontalArrangement = Arrangement.spacedBy(15.dp), verticalArrangement = Arrangement.spacedBy(20.dp), contentPadding = PaddingValues(bottom = 50.dp)
                                         ) {
                                             items(filteredMovies) { movie ->
-                                                MovieItem(movie = movie, isMobile = false, onClick = {
-                                                    resetTimer()
-                                                    val intent = Intent(context, MoviePlayerActivity::class.java).apply {
-                                                        putExtra("MOVIE_URL", movie.video_url)
-                                                        putExtra("MOVIE_TITLE", movie.title)
-                                                    }
-                                                    context.startActivity(intent)
-                                                }, onFocus = { resetTimer() })
+                                                MovieItem(
+                                                    movie = movie, isMobile = false,
+                                                    onClick = {
+                                                        resetTimer()
+                                                        val intent = Intent(context, MoviePlayerActivity::class.java).apply { putExtra("MOVIE_URL", movie.video_url); putExtra("MOVIE_TITLE", movie.title) }
+                                                        context.startActivity(intent)
+                                                    },
+                                                    onFocus = { resetTimer() }
+                                                )
                                             }
                                         }
                                     }
@@ -526,7 +476,13 @@ fun MainScreen(viewModel: MainViewModel, onLoginRequest: () -> Unit) {
                                         LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                             itemsIndexed(filteredChannels, key = { index, item -> item.id ?: "${item.url}_$index" }) { index, channel ->
                                                 val displayNumber = if (viewModel.isUserAuthenticated) index + 1 else index
-                                                ChannelListItem(number = displayNumber, channel = channel, isSelected = currentChannelUrl == channel.url, isFavorite = viewModel.favorites.any { it.url == channel.url }, isMobile = false, onClick = { resetTimer(); viewModel.playVideo(channel.url) }, onFocus = { resetTimer() }, onLeft = { resetTimer(); try { initialFocusRequester.requestFocus() } catch(e:Exception){} }, onRight = { resetTimer(); showMenu = false })
+                                                ChannelListItem(
+                                                    number = displayNumber, channel = channel, isSelected = currentChannelUrl == channel.url, isFavorite = viewModel.favorites.any { it.url == channel.url }, isMobile = false,
+                                                    onClick = { resetTimer(); viewModel.playVideo(channel.url) },
+                                                    onFocus = { resetTimer() },
+                                                    onLeft = { resetTimer(); try { initialFocusRequester.requestFocus() } catch(e:Exception){} },
+                                                    onRight = { resetTimer(); showMenu = false }
+                                                )
                                             }
                                         }
                                     }
