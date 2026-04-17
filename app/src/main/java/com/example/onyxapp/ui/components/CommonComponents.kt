@@ -294,7 +294,7 @@ private fun MovieItemContent(movie: Movie, isFocused: Boolean) {
                 .background(
                     Brush.verticalGradient(
                         listOf(Color.Transparent, Color.Black.copy(0.8f)),
-                        startY = 200f // Ajustado para que el gradiente sea más suave
+                        startY = 200f
                     )
                 )
         )
@@ -404,18 +404,23 @@ fun VideoPlayer(mediaPlayer: MediaPlayer, modifier: Modifier) {
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT
                 )
-                mediaPlayer.detachViews()
-                mediaPlayer.attachViews(this, null, true, false)
+                if (!mediaPlayer.isReleased) {
+                    mediaPlayer.detachViews() // Limpiar antes de asignar
+                    mediaPlayer.attachViews(this, null, true, false)
+                }
             }
         },
         update = { vlcLayout ->
-            if (!mediaPlayer.vlcVout.areViewsAttached()) {
+            if (!mediaPlayer.isReleased) {
+                // Re-vincular vistas para asegurar que el vout se cree correctamente
                 mediaPlayer.detachViews()
                 mediaPlayer.attachViews(vlcLayout, null, true, false)
             }
         },
         onRelease = {
-            mediaPlayer.detachViews()
+            if (!mediaPlayer.isReleased) {
+                mediaPlayer.detachViews()
+            }
         },
         modifier = modifier
     )

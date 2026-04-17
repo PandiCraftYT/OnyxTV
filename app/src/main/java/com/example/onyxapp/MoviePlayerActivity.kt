@@ -2,6 +2,7 @@ package com.example.onyxapp
 
 import android.app.Activity
 import android.os.Bundle
+import android.util.Log
 import android.view.KeyEvent
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
@@ -41,13 +42,13 @@ import java.util.concurrent.TimeUnit
 class MoviePlayerActivity : ComponentActivity() {
 
     private lateinit var playerManager: PlayerManager
+    private var movieUrl: String = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Pantalla completa y encendida (Ideal para Móvil y TV)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
-        val movieUrl = intent.getStringExtra("MOVIE_URL") ?: ""
+        movieUrl = intent.getStringExtra("MOVIE_URL") ?: ""
         val movieTitle = intent.getStringExtra("MOVIE_TITLE") ?: "Película"
 
         playerManager = PlayerManager(this) { _ -> }
@@ -61,6 +62,21 @@ class MoviePlayerActivity : ComponentActivity() {
                     title = movieTitle
                 )
             }
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        // DETENER: Si el usuario sale (Home), liberamos recursos
+        playerManager.releasePlayer()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // RESTAURAR: Al volver a la app, reiniciamos el video si hay URL
+        if (movieUrl.isNotEmpty()) {
+            playerManager.initLibVLC()
+            playerManager.play(movieUrl, ChannelsConfig.PC_USER_AGENT)
         }
     }
 
@@ -83,7 +99,6 @@ fun MoviePlayerScreen(
     var showControls by remember { mutableStateOf(true) }
     var isLoading by remember { mutableStateOf(true) }
 
-    val mediaPlayer = remember { playerManager.mediaPlayer }
     val playButtonFocusRequester = remember { FocusRequester() }
 
     LaunchedEffect(Unit) {
@@ -93,32 +108,39 @@ fun MoviePlayerScreen(
     // Actualización de progreso y estados cada segundo
     LaunchedEffect(Unit) {
         while (true) {
-            mediaPlayer?.let {
-                isPlaying = it.isPlaying
-                currentTime = it.time
-                totalTime = it.length
-                if (it.isPlaying) isLoading = false
+            try {
+                val mp = playerManager.mediaPlayer
+                if (mp != null && !mp.isReleased) {
+                    isPlaying = mp.isPlaying
+                    currentTime = mp.time
+                    totalTime = mp.length
+                    if (isPlaying) isLoading = false
+                } else {
+                    isPlaying = false
+                }
+            } catch (e: Exception) {
+                Log.e("MoviePlayer", "Error in progress loop: ${e.message}")
+                isPlaying = false
             }
             delay(1000)
         }
     }
 
-    // Auto-ocultar controles si está reproduciendo (y re-enfocar para TV cuando aparecen)
+    // Auto-ocultar controles si está reproduciendo
     LaunchedEffect(showControls, isPlaying) {
         if (showControls) {
             try {
-                // Intenta dar foco al botón Play para los usuarios de TV
                 playButtonFocusRequester.requestFocus()
             } catch (e: Exception) {}
 
             if (isPlaying) {
-                delay(5000) // Se oculta a los 5 segundos (Buen tiempo para touch y control)
+                delay(5000)
                 showControls = false
             }
         }
     }
 
-    // Manejar el botón "Atrás" (Back de Android Móvil o Back del Control de TV)
+    // Manejar el botón "Atrás"
     BackHandler {
         playerManager.releasePlayer()
         context.finish()
@@ -128,24 +150,15 @@ fun MoviePlayerScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
-            // 1. SOPORTE PARA MÓVIL: Detectar toques con los dedos en la pantalla para mostrar/ocultar
             .pointerInput(Unit) {
-                detectTapGestures(
-                    onTap = {
-                        showControls = !showControls
-                    }
-                )
+                detectTapGestures(onTap = { showControls = !showControls })
             }
-            // 2. SOPORTE PARA TV: Escuchar botones físicos del control remoto
             .onKeyEvent { event ->
                 if (event.type == KeyEventType.KeyDown) {
-                    // Si los controles están ocultos, presionar cualquier botón los despierta
                     if (!showControls && event.nativeKeyEvent.keyCode != KeyEvent.KEYCODE_BACK) {
                         showControls = true
                         return@onKeyEvent true
                     }
-
-                    // Accesos directos físicos del control remoto
                     when (event.nativeKeyEvent.keyCode) {
                         KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, KeyEvent.KEYCODE_MEDIA_PLAY, KeyEvent.KEYCODE_MEDIA_PAUSE -> {
                             if (isPlaying) playerManager.pause() else playerManager.resume()
@@ -172,10 +185,9 @@ fun MoviePlayerScreen(
                 }
                 false
             }
-            .focusable() // Hacer que el Box principal pueda recibir eventos de TV
+            .focusable()
     ) {
-        // EL REPRODUCTOR
-        mediaPlayer?.let { VideoPlayer(it, Modifier.fillMaxSize()) }
+        playerManager.mediaPlayer?.let { VideoPlayer(it, Modifier.fillMaxSize()) }
 
         if (isLoading) {
             CircularProgressIndicator(
@@ -190,11 +202,10 @@ fun MoviePlayerScreen(
             exit = fadeOut() + slideOutVertically { it / 2 }
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
-                // Título de la película arriba
                 Text(
                     text = title.uppercase(),
                     color = Color.White,
-                    fontSize = 20.sp, // Tamaño balanceado para Móvil y TV
+                    fontSize = 20.sp,
                     fontWeight = FontWeight.Black,
                     modifier = Modifier
                         .align(Alignment.TopStart)
@@ -203,7 +214,6 @@ fun MoviePlayerScreen(
                         .padding(horizontal = 16.dp, vertical = 8.dp)
                 )
 
-                // Panel de controles abajo
                 Column(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
@@ -211,7 +221,6 @@ fun MoviePlayerScreen(
                         .background(Color.Black.copy(0.85f))
                         .padding(horizontal = 30.dp, vertical = 24.dp)
                 ) {
-                    // El Slider funciona nativamente con toques en Móvil y se le agrega focusable para TV
                     Slider(
                         value = if (totalTime > 0) currentTime.toFloat() / totalTime.toFloat() else 0f,
                         onValueChange = {
@@ -234,31 +243,23 @@ fun MoviePlayerScreen(
                         Text(formatTime(currentTime), color = Color.White, fontWeight = FontWeight.Bold)
 
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            // Botón Universal Retroceder
                             UniversalIconButton(
                                 icon = Icons.Default.Replay10,
                                 onClick = { playerManager.seekTo(currentTime - 10000) }
                             )
-
                             Spacer(Modifier.width(20.dp))
-
-                            // Botón Universal Play/Pausa
                             UniversalIconButton(
                                 icon = if (isPlaying) Icons.Default.PauseCircle else Icons.Default.PlayCircle,
                                 iconSize = 64.dp,
                                 modifier = Modifier.focusRequester(playButtonFocusRequester),
                                 onClick = { if (isPlaying) playerManager.pause() else playerManager.resume() }
                             )
-
                             Spacer(Modifier.width(20.dp))
-
-                            // Botón Universal Adelantar
                             UniversalIconButton(
                                 icon = Icons.Default.Forward10,
                                 onClick = { playerManager.seekTo(currentTime + 10000) }
                             )
                         }
-
                         Text(formatTime(totalTime), color = Color.White.copy(0.7f))
                     }
                 }
@@ -267,35 +268,27 @@ fun MoviePlayerScreen(
     }
 }
 
-// Componente Híbrido: Reacciona al dedo (tap) y al control de TV (foco)
 @Composable
 fun UniversalIconButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     modifier: Modifier = Modifier,
-    iconSize: androidx.compose.ui.unit.Dp = 48.dp, // Tamaño amigable para dedos
+    iconSize: androidx.compose.ui.unit.Dp = 48.dp,
     onClick: () -> Unit
 ) {
     var isFocused by remember { mutableStateOf(false) }
-
     Box(
         modifier = modifier
             .clip(CircleShape)
-            // Color de fondo solo se activa si hay un control de TV enfocándolo
             .background(if (isFocused) Color.White.copy(alpha = 0.2f) else Color.Transparent)
             .focusable()
             .onFocusChanged { isFocused = it.isFocused }
             .padding(4.dp),
         contentAlignment = Alignment.Center
     ) {
-        // IconButton nativo maneja perfectamente los toques con los dedos
-        IconButton(
-            onClick = onClick,
-            modifier = Modifier.size(iconSize)
-        ) {
+        IconButton(onClick = onClick, modifier = Modifier.size(iconSize)) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                // Cambia el color para que el usuario de TV sepa dónde está
                 tint = if (isFocused) Color(0xFF00B4D8) else Color.White,
                 modifier = Modifier.fillMaxSize()
             )

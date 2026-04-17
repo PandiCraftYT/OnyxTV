@@ -113,6 +113,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     var currentDate by mutableStateOf("")
         private set
 
+    var currentTimeMs by mutableLongStateOf(0L)
+        private set
+    var totalTimeMs by mutableLongStateOf(0L)
+        private set
+
     private var retryCount = 0
     private val MAX_RETRIES = 15
 
@@ -134,6 +139,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     var videoAspectRatio by mutableFloatStateOf(16f / 9f)
     var isFromPromoChannel = false
     var onShowLoginRequested: (() -> Unit)? = null
+
+    // Configuración de Aceleración de Hardware (CPU vs GPU)
+    var isHwEnabled by mutableStateOf(prefs.getBoolean("hw_enabled", true))
+        private set
 
     // --- Mensajería Global ---
     var activeGlobalMessage by mutableStateOf<GlobalMessage?>(null)
@@ -165,6 +174,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     init {
         syncTimeWithNetwork()
         startClock()
+        startProgressTracker()
         loadUserFromCache()
         setupRealtime()
         checkForUpdates()
@@ -404,7 +414,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun togglePause() {
         if (isPlaying) playerManager.pause()
-        else if (currentChannelUrl.isNotEmpty()) playVideo(currentChannelUrl, resetRetry = false)
+        else if (currentChannelUrl.isNotEmpty()) playerManager.resume()
+    }
+
+    fun resumePlayback() {
+        playerManager.resume()
+    }
+
+    fun toggleHwAcceleration() {
+        isHwEnabled = !isHwEnabled
+        prefs.edit { putBoolean("hw_enabled", isHwEnabled) }
+        if (currentChannelUrl.isNotEmpty()) {
+            playVideo(currentChannelUrl, resetRetry = false)
+        }
     }
 
     fun playVideo(url: String, resetRetry: Boolean = true) {
@@ -432,7 +454,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
             currentChannelUrl = url
             isLoading = true
-            playerManager.play(url, ChannelsConfig.PC_USER_AGENT)
+            playerManager.play(url, ChannelsConfig.PC_USER_AGENT, hwAcceleration = isHwEnabled)
 
             if (resetRetry) {
                 prefs.edit { putString("last_channel_url", url) }
@@ -442,6 +464,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun stopPlayback() {
         playerManager.stop()
+    }
+
+    fun seekTo(time: Long) {
+        playerManager.seekTo(time)
     }
 
     fun clearAuthError() { authError = null }
@@ -749,6 +775,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val now = getRealTime()
                 currentTime = SimpleDateFormat("hh:mm:ss a", Locale.getDefault()).format(now)
                 currentDate = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(now)
+                delay(1000)
+            }
+        }
+    }
+
+    private fun startProgressTracker() {
+        viewModelScope.launch {
+            while (true) {
+                mediaPlayer?.let { mp ->
+                    if (!mp.isReleased && mp.isPlaying) {
+                        currentTimeMs = mp.time
+                        totalTimeMs = mp.length
+                    }
+                }
                 delay(1000)
             }
         }

@@ -61,6 +61,8 @@ import com.example.onyxapp.ui.components.*
 import com.example.onyxapp.ui.theme.OnyxAppTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.util.Locale
+import java.util.concurrent.TimeUnit
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 class MainActivity : ComponentActivity() {
@@ -130,38 +132,61 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-// ... [Mantén tus overlays VideoControlsOverlay y VideoStatusOverlay exactamente igual] ...
 @Composable
 fun VideoControlsOverlay(
     isPlaying: Boolean,
     title: String,
+    group: String = "LIVE",
+    currentTimeMs: Long = 0,
+    totalTimeMs: Long = 0,
     onTogglePause: () -> Unit,
     onNext: () -> Unit,
     onFullScreen: () -> Unit,
+    onSeek: (Float) -> Unit = {},
     isFullScreen: Boolean,
     visible: Boolean
 ) {
+    val isMovie = group.contains("PELÍCULA", true) || group.contains("MOVIE", true)
+    
     AnimatedVisibility(
         visible = visible,
         enter = fadeIn() + slideInVertically { it },
         exit = fadeOut() + slideOutVertically { it }
     ) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
-            Row(
-                modifier = Modifier.fillMaxWidth().background(Color.Black.copy(alpha = 0.6f)).padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                    IconButton(onClick = onTogglePause) { Icon(if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, null, tint = Color.White) }
-                    IconButton(onClick = onNext) { Icon(Icons.Default.SkipNext, null, tint = Color.White) }
-                    Spacer(Modifier.width(8.dp))
-                    Text(text = title.uppercase(), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Column(modifier = Modifier.fillMaxWidth().background(Color.Black.copy(alpha = 0.6f))) {
+                if (isMovie && totalTimeMs > 0) {
+                    Slider(
+                        value = (currentTimeMs.toFloat() / totalTimeMs.toFloat()).coerceIn(0f, 1f),
+                        onValueChange = onSeek,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                        colors = SliderDefaults.colors(thumbColor = Color(0xFF00B4D8), activeTrackColor = Color(0xFF00B4D8))
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(formatTime(currentTimeMs), color = Color.White, fontSize = 10.sp)
+                        Text(formatTime(totalTimeMs), color = Color.White, fontSize = 10.sp)
+                    }
                 }
-                Box(modifier = Modifier.weight(0.5f), contentAlignment = Alignment.Center) {
-                    Text(text = "LIVE", color = Color.Red, fontWeight = FontWeight.Black, fontSize = 14.sp)
-                }
-                Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
-                    IconButton(onClick = onFullScreen) { Icon(if (isFullScreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen, null, tint = Color.White) }
+                
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                        IconButton(onClick = onTogglePause) { Icon(if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, null, tint = Color.White) }
+                        IconButton(onClick = onNext) { Icon(Icons.Default.SkipNext, null, tint = Color.White) }
+                        Spacer(Modifier.width(8.dp))
+                        Text(text = title.uppercase(), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                    Box(modifier = Modifier.weight(0.5f), contentAlignment = Alignment.Center) {
+                        Text(text = if (isMovie) "PELÍCULA" else "LIVE", color = if (isMovie) Color(0xFF00B4D8) else Color.Red, fontWeight = FontWeight.Black, fontSize = 14.sp)
+                    }
+                    Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
+                        IconButton(onClick = onFullScreen) { Icon(if (isFullScreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen, null, tint = Color.White) }
+                    }
                 }
             }
         }
@@ -214,6 +239,7 @@ fun MainScreen(viewModel: MainViewModel, onLoginRequest: () -> Unit) {
     val filteredChannels = viewModel.filteredChannels
     val filteredMovies = viewModel.filteredMovies
     val currentChannelUrl = viewModel.currentChannelUrl
+    val isMoviePlaying = viewModel.currentPlaybackGroup.contains("PELÍCULA", true) || viewModel.currentPlaybackGroup.contains("MOVIE", true)
 
     LaunchedEffect(showVideoControls) {
         if (showVideoControls) { delay(5000); showVideoControls = false }
@@ -296,6 +322,8 @@ fun MainScreen(viewModel: MainViewModel, onLoginRequest: () -> Unit) {
                 when (event.nativeKeyEvent.keyCode) {
                     KeyEvent.KEYCODE_DPAD_UP -> { viewModel.zapNext(); return@onPreviewKeyEvent true }
                     KeyEvent.KEYCODE_DPAD_DOWN -> { viewModel.zapPrevious(); return@onPreviewKeyEvent true }
+                    KeyEvent.KEYCODE_DPAD_LEFT -> { if (isMoviePlaying) { viewModel.seekTo(viewModel.currentTimeMs - 15000); return@onPreviewKeyEvent true } }
+                    KeyEvent.KEYCODE_DPAD_RIGHT -> { if (isMoviePlaying) { viewModel.seekTo(viewModel.currentTimeMs + 30000); return@onPreviewKeyEvent true } }
                 }
             }
         }
@@ -322,8 +350,11 @@ fun MainScreen(viewModel: MainViewModel, onLoginRequest: () -> Unit) {
             if (isMobile || isFullScreen) {
                 VideoControlsOverlay(
                     isPlaying = viewModel.isPlaying, title = viewModel.currentPlaybackTitle,
+                    group = viewModel.currentPlaybackGroup,
+                    currentTimeMs = viewModel.currentTimeMs, totalTimeMs = viewModel.totalTimeMs,
                     onTogglePause = { resetTimer(); viewModel.togglePause() }, onNext = { resetTimer(); viewModel.zapNext() },
                     onFullScreen = { resetTimer(); if (isFullScreen) { isFullScreen = false; showMenu = true } else { isFullScreen = true; showMenu = false }; showVideoControls = false },
+                    onSeek = { viewModel.seekTo((it * viewModel.totalTimeMs).toLong()) },
                     isFullScreen = isFullScreen, visible = showVideoControls
                 )
             }
@@ -374,8 +405,7 @@ fun MainScreen(viewModel: MainViewModel, onLoginRequest: () -> Unit) {
                                         items(filteredMovies) { movie ->
                                             MovieItem(movie = movie, isMobile = true, onClick = {
                                                 resetTimer()
-                                                val intent = Intent(context, MoviePlayerActivity::class.java).apply { putExtra("MOVIE_URL", movie.video_url); putExtra("MOVIE_TITLE", movie.title) }
-                                                context.startActivity(intent)
+                                                viewModel.playVideo(movie.video_url)
                                             }, onFocus = { resetTimer() })
                                         }
                                     }
@@ -464,8 +494,7 @@ fun MainScreen(viewModel: MainViewModel, onLoginRequest: () -> Unit) {
                                                     movie = movie, isMobile = false,
                                                     onClick = {
                                                         resetTimer()
-                                                        val intent = Intent(context, MoviePlayerActivity::class.java).apply { putExtra("MOVIE_URL", movie.video_url); putExtra("MOVIE_TITLE", movie.title) }
-                                                        context.startActivity(intent)
+                                                        viewModel.playVideo(movie.video_url)
                                                     },
                                                     onFocus = { resetTimer() }
                                                 )
@@ -494,6 +523,19 @@ fun MainScreen(viewModel: MainViewModel, onLoginRequest: () -> Unit) {
                             if (viewModel.currentPlaybackTitle.isNotEmpty()) {
                                 Text(viewModel.currentPlaybackTitle.uppercase(), style = MaterialTheme.typography.headlineMedium, color = Color.White, fontWeight = FontWeight.Black)
                                 Text(viewModel.currentPlaybackGroup, color = Color(0xFF00B4D8), fontWeight = FontWeight.Bold)
+                                
+                                if (isMoviePlaying && viewModel.totalTimeMs > 0) {
+                                    Spacer(Modifier.height(12.dp))
+                                    LinearProgressIndicator(
+                                        progress = { (viewModel.currentTimeMs.toFloat() / viewModel.totalTimeMs.toFloat()).coerceIn(0f, 1f) },
+                                        modifier = Modifier.fillMaxWidth(0.8f).height(6.dp).clip(RoundedCornerShape(3.dp)),
+                                        color = Color(0xFF00B4D8), trackColor = Color.White.copy(0.2f)
+                                    )
+                                    Row(modifier = Modifier.fillMaxWidth(0.8f).padding(top = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                                        Text(formatTime(viewModel.currentTimeMs), color = Color.White.copy(0.7f), fontSize = 12.sp)
+                                        Text(formatTime(viewModel.totalTimeMs), color = Color.White.copy(0.7f), fontSize = 12.sp)
+                                    }
+                                }
                             }
                         }
                     }
@@ -501,4 +543,12 @@ fun MainScreen(viewModel: MainViewModel, onLoginRequest: () -> Unit) {
             }
         }
     }
+}
+
+private fun formatTime(ms: Long): String {
+    val h = TimeUnit.MILLISECONDS.toHours(ms)
+    val m = TimeUnit.MILLISECONDS.toMinutes(ms) % 60
+    val s = TimeUnit.MILLISECONDS.toSeconds(ms) % 60
+    return if (h > 0) String.format(Locale.getDefault(), "%02d:%02d:%02d", h, m, s)
+    else String.format(Locale.getDefault(), "%02d:%02d", m, s)
 }

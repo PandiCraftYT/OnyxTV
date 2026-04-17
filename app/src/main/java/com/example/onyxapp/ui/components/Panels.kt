@@ -10,8 +10,10 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
+import androidx.compose.material.icons.filled.DeveloperMode
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -34,14 +36,19 @@ import com.example.onyxapp.MainViewModel
 import kotlinx.coroutines.delay
 
 @Composable
-fun SettingButton(text: String, icon: ImageVector, color: Color, onClick: () -> Unit) {
-    // MEJORA 1: Interceptamos el foco para saber si el usuario de TV está seleccionando este botón
+fun SettingButton(
+    text: String, 
+    icon: ImageVector, 
+    color: Color, 
+    statusText: String? = null,
+    onClick: () -> Unit
+) {
     val interactionSource = remember { MutableInteractionSource() }
     val isFocused by interactionSource.collectIsFocusedAsState()
 
     Surface(
         onClick = onClick,
-        interactionSource = interactionSource, // Conectamos el botón al detector de foco
+        interactionSource = interactionSource,
         color = if (isFocused) color.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.05f),
         border = BorderStroke(if (isFocused) 2.dp else 1.dp, if (isFocused) color else Color.Transparent),
         shape = RoundedCornerShape(12.dp),
@@ -50,15 +57,26 @@ fun SettingButton(text: String, icon: ImageVector, color: Color, onClick: () -> 
         Row(
             modifier = Modifier.padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Icon(icon, contentDescription = null, tint = color)
-            Text(
-                text = text,
-                color = if (isFocused) Color.White else Color.White.copy(alpha = 0.9f),
-                fontSize = 16.sp,
-                fontWeight = if (isFocused) FontWeight.Bold else FontWeight.Medium
-            )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                Icon(icon, contentDescription = null, tint = color)
+                Text(
+                    text = text,
+                    color = if (isFocused) Color.White else Color.White.copy(alpha = 0.9f),
+                    fontSize = 16.sp,
+                    fontWeight = if (isFocused) FontWeight.Bold else FontWeight.Medium
+                )
+            }
+            if (statusText != null) {
+                Text(
+                    text = statusText,
+                    color = color,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Black,
+                    modifier = Modifier.background(color.copy(0.1f), RoundedCornerShape(4.dp)).padding(horizontal = 8.dp, vertical = 2.dp)
+                )
+            }
         }
     }
 }
@@ -73,6 +91,17 @@ fun SettingsPanel(viewModel: MainViewModel, onInteraction: () -> Unit) {
 
     Column(modifier = Modifier.fillMaxSize().padding(10.dp), verticalArrangement = Arrangement.spacedBy(15.dp)) {
         Text("CONFIGURACIÓN", style = MaterialTheme.typography.titleMedium, color = Color.White, fontWeight = FontWeight.Bold)
+
+        // BOTÓN DE ACELERACIÓN DE HARDWARE
+        SettingButton(
+            text = "Modo de Reproducción", 
+            icon = Icons.Default.Memory, 
+            color = if (viewModel.isHwEnabled) Color(0xFF00FF00) else Color(0xFFFFA500),
+            statusText = if (viewModel.isHwEnabled) "GPU (Hardware)" else "CPU (Software)"
+        ) {
+            viewModel.toggleHwAcceleration()
+            onInteraction()
+        }
 
         SettingButton("Contacto y Soporte", Icons.Default.Info, Color(0xFF00B4D8)) {
             showInfoDialog = true
@@ -90,6 +119,16 @@ fun SettingsPanel(viewModel: MainViewModel, onInteraction: () -> Unit) {
                 onInteraction()
             }
         }
+        
+        Spacer(Modifier.weight(1f))
+        
+        // Versión de la App al final
+        Text(
+            text = "Versión 2.0.0 - Onyx TV",
+            color = Color.White.copy(0.3f),
+            fontSize = 10.sp,
+            modifier = Modifier.align(Alignment.CenterHorizontally)
+        )
     }
 
     // --------------------------------------------------------
@@ -98,7 +137,6 @@ fun SettingsPanel(viewModel: MainViewModel, onInteraction: () -> Unit) {
     if (showInfoDialog) {
         val closeFocusRequester = remember { FocusRequester() }
 
-        // Atrae el foco al botón "CERRAR" automáticamente al abrir
         LaunchedEffect(Unit) {
             delay(100)
             try { closeFocusRequester.requestFocus() } catch (e: Exception) {}
@@ -135,7 +173,6 @@ fun SettingsPanel(viewModel: MainViewModel, onInteraction: () -> Unit) {
     if (showLogoutConfirm) {
         val cancelFocusRequester = remember { FocusRequester() }
 
-        // MEJORA 2: Foco seguro. Siempre enfocamos "CANCELAR" por defecto para evitar toques accidentales
         LaunchedEffect(Unit) {
             delay(100)
             try { cancelFocusRequester.requestFocus() } catch (e: Exception) {}
@@ -196,7 +233,6 @@ fun SettingsPanel(viewModel: MainViewModel, onInteraction: () -> Unit) {
                     Text("Introduce tu nueva contraseña (mínimo 6 caracteres):", color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp)
                     Spacer(Modifier.height(10.dp))
 
-                    // MEJORA 3: Campo Seguro. Oculta el texto y oculta el teclado al terminar.
                     OutlinedTextField(
                         value = newPass,
                         onValueChange = { newPass = it },
@@ -212,7 +248,7 @@ fun SettingsPanel(viewModel: MainViewModel, onInteraction: () -> Unit) {
                         keyboardActions = KeyboardActions(
                             onDone = {
                                 keyboardController?.hide()
-                                updateFocusRequester.requestFocus() // Salta al botón ACTUALIZAR
+                                try { updateFocusRequester.requestFocus() } catch(e: Exception) {}
                             }
                         ),
                         shape = RoundedCornerShape(12.dp),

@@ -12,19 +12,12 @@ android {
         applicationId = "com.example.onyxapp"
         minSdk = 23
         targetSdk = 35 
-        versionCode = 5
-        versionName = "1.0.6"
-
-        // OPTIMIZACIÓN: Solo dejamos arquitecturas de TV (ARM)
-        // Esto quita las librerías x86 de VLC que pesan muchísimo
-        ndk {
-            abiFilters.addAll(listOf("armeabi-v7a", "arm64-v8a"))
-        }
+        versionCode = 6
+        versionName = "1.0.7"
     }
 
     packaging {
         jniLibs {
-            // OPTIMIZACIÓN: Permitir compresión de librerías nativas
             useLegacyPackaging = true
         }
         resources {
@@ -33,9 +26,19 @@ android {
     }
 
     buildTypes {
+        debug {
+            // EN DESARROLLO: Permitimos x86 para que funcione el emulador de PC
+            ndk {
+                abiFilters.addAll(listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64"))
+            }
+        }
         release {
-            isMinifyEnabled = true // Ya lo tenías, ayuda a quitar código muerto
-            isShrinkResources = true // Ya lo tenías, ayuda a quitar recursos no usados
+            // AL EXPORTAR: Solo dejamos arquitecturas de TV real para que pese poco
+            ndk {
+                abiFilters.addAll(listOf("armeabi-v7a", "arm64-v8a"))
+            }
+            isMinifyEnabled = true 
+            isShrinkResources = true 
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -59,7 +62,6 @@ android {
 
 dependencies {
     implementation(libs.androidx.core.ktx)
-    // VLC es el componente más pesado. Al filtrar ABIs arriba, solo se incluirá lo necesario.
     implementation("org.videolan.android:libvlc-all:3.6.0-eap5")
     implementation(libs.androidx.appcompat)
     implementation(platform(libs.androidx.compose.bom))
