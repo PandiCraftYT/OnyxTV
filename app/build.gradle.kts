@@ -12,8 +12,8 @@ android {
         applicationId = "com.example.onyxapp"
         minSdk = 23
         targetSdk = 35 
-        versionCode = 3
-        versionName = "1.2"
+        versionCode = 4
+        versionName = "1.0.5"
 
         // OPTIMIZACIÓN: Solo dejamos arquitecturas de TV (ARM)
         // Esto quita las librerías x86 de VLC que pesan muchísimo

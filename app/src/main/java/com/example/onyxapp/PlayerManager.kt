@@ -2,7 +2,6 @@ package com.example.onyxapp
 
 import android.content.Context
 import android.util.Log
-import androidx.compose.runtime.*
 import androidx.core.net.toUri
 import org.videolan.libvlc.LibVLC
 import org.videolan.libvlc.Media
@@ -32,7 +31,10 @@ class PlayerManager(
                 "--rtsp-tcp",
                 "--no-stats",
                 "--no-osd",
-                "--ipv4"
+                "--ipv4",
+                "--video-title-show",
+                "--vout=android-display",
+                "--audio-resampler=soxr"
             )
 
             _libVlc = LibVLC(context, args)
@@ -50,7 +52,6 @@ class PlayerManager(
         val safePlayer = _mediaPlayer ?: return
         val safeLibVlc = _libVlc ?: return
 
-        // Usamos un hilo dedicado para no trabar la interfaz de la app (ANRs)
         thread(start = true) {
             try {
                 if (safePlayer.isPlaying) {
@@ -58,41 +59,19 @@ class PlayerManager(
                 }
 
                 val media = Media(safeLibVlc, url.toUri())
-
-                val isHttp = url.startsWith("http://")
-                val isProblematic = url.contains("201.217.246.42")
+                val finalUA = userAgent ?: "IPTVSmartersPlayer"
                 
-                // Identidad optimizada para IPTV
-                val finalUA = when {
-                    isHttp || isProblematic -> "IPTVSmartersPlayer"
-                    userAgent != null -> userAgent
-                    else -> "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-                }
-
                 media.addOption(":http-user-agent=$finalUA")
-
-                // Opciones de red optimizadas
-                media.addOption(":network-caching=2000") // 2 segundos para estabilidad en HTTP
+                media.addOption(":network-caching=2000")
                 media.addOption(":http-reconnect=true")
                 media.addOption(":no-ssl-verify")
-                
-                // SOLUCIÓN PARA CANALES HTTP QUE SE TRABAN (Error 206)
-                if (isHttp) {
-                    media.addOption(":no-http-range") // Evita peticiones por trozos que rompen el servidor
-                    media.addOption(":http-forward-cookies=1")
-                    media.addOption(":adaptive-logic=lowest") // Inicio ultra-rápido
-                }
-
-                if (isProblematic) {
-                    media.addOption(":clock-jitter=0")
-                    media.addOption(":clock-synchro=0")
-                }
+                media.addOption(":clock-jitter=0")
 
                 safePlayer.media = media
                 media.release()
                 safePlayer.play()
                 
-                Log.d("OnyxPlayer", "Canal iniciado en hilo asíncrono: $url")
+                Log.d("OnyxPlayer", "Contenido iniciado: $url")
             } catch (e: Exception) {
                 Log.e("Onyx", "Error en hilo de reproducción", e)
             }
@@ -105,6 +84,14 @@ class PlayerManager(
 
     fun pause() {
         _mediaPlayer?.pause()
+    }
+
+    fun resume() {
+        _mediaPlayer?.play()
+    }
+
+    fun seekTo(time: Long) {
+        _mediaPlayer?.time = time
     }
 
     fun releasePlayer() {

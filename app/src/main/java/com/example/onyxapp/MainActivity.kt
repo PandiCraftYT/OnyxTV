@@ -1,6 +1,7 @@
 package com.example.onyxapp
 
 import android.app.Activity
+import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.os.Bundle
@@ -415,7 +416,11 @@ fun MainScreen(viewModel: MainViewModel, onLoginRequest: () -> Unit) {
                                         items(filteredMovies) { movie ->
                                             MovieItem(movie = movie, isMobile = true, onClick = {
                                                 resetTimer()
-                                                viewModel.playVideo(movie.video_url)
+                                                val intent = Intent(context, MoviePlayerActivity::class.java).apply {
+                                                    putExtra("MOVIE_URL", movie.video_url)
+                                                    putExtra("MOVIE_TITLE", movie.title)
+                                                }
+                                                context.startActivity(intent)
                                             }, onFocus = { resetTimer() })
                                         }
                                     }
@@ -508,7 +513,11 @@ fun MainScreen(viewModel: MainViewModel, onLoginRequest: () -> Unit) {
                                             items(filteredMovies) { movie ->
                                                 MovieItem(movie = movie, isMobile = false, onClick = {
                                                     resetTimer()
-                                                    viewModel.playVideo(movie.video_url)
+                                                    val intent = Intent(context, MoviePlayerActivity::class.java).apply {
+                                                        putExtra("MOVIE_URL", movie.video_url)
+                                                        putExtra("MOVIE_TITLE", movie.title)
+                                                    }
+                                                    context.startActivity(intent)
                                                 }, onFocus = { resetTimer() })
                                             }
                                         }
