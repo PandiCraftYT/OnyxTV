@@ -20,6 +20,7 @@ import io.github.jan.supabase.auth.status.SessionStatus
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Order
 import io.github.jan.supabase.realtime.PostgresAction
+import io.github.jan.supabase.realtime.Realtime
 import io.github.jan.supabase.realtime.channel
 import io.github.jan.supabase.realtime.decodeRecord
 import io.github.jan.supabase.realtime.postgresChangeFlow
@@ -27,6 +28,7 @@ import io.github.jan.supabase.realtime.realtime
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.videolan.libvlc.MediaPlayer
@@ -190,76 +192,92 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun setupRealtime() {
         viewModelScope.launch {
-            try {
-                supabase.realtime.connect()
-                
-                // --- CANALES ---
-                val myChannel = supabase.realtime.channel("public-channels")
-                val changeFlow = myChannel.postgresChangeFlow<PostgresAction>(schema = "public") {
-                    table = "channels"
-                }
-                launch {
-                    changeFlow.collect { action ->
-                        withContext(Dispatchers.Main) {
-                            handleDatabaseAction(action)
-                        }
+            // Reintento infinito silencioso para conexión Realtime (Ideal para TVs con WiFi inestable)
+            while (true) {
+                try {
+                    Log.d("OnyxRealtime", "Intentando conectar a Realtime...")
+                    supabase.realtime.connect()
+                    
+                    // --- CANALES ---
+                    val myChannel = supabase.realtime.channel("public-channels")
+                    val changeFlow = myChannel.postgresChangeFlow<PostgresAction>(schema = "public") {
+                        table = "channels"
                     }
-                }
-                myChannel.subscribe()
-
-                // --- PELÍCULAS ---
-                val moviesChannel = supabase.realtime.channel("public-movies")
-                val moviesFlow = moviesChannel.postgresChangeFlow<PostgresAction>(schema = "public") {
-                    table = "movies"
-                }
-                launch {
-                    moviesFlow.collect { observeMovies() }
-                }
-                moviesChannel.subscribe()
-
-                // --- MENSAJES GLOBALES ---
-                val messagesChannel = supabase.realtime.channel("global-messages")
-                val messagesFlow = messagesChannel.postgresChangeFlow<PostgresAction>(schema = "public") {
-                    table = "global_messages"
-                }
-                launch {
-                    messagesFlow.collect { action ->
-                        withContext(Dispatchers.Main) {
-                            handleGlobalMessageAction(action)
-                        }
-                    }
-                }
-                messagesChannel.subscribe()
-
-                // --- ESCUCHAR CAMBIOS EN TABLA 'users' ---
-                supabase.auth.sessionStatus.collect { status ->
-                    if (status is SessionStatus.Authenticated) {
-                        val user = status.session.user
-                        if (user != null) {
-                            val profileChannel = supabase.realtime.channel("user-data-sync")
-                            val profileFlow = profileChannel.postgresChangeFlow<PostgresAction>(schema = "public") {
-                                table = "users"
+                    launch {
+                        changeFlow.collect { action ->
+                            withContext(Dispatchers.Main) {
+                                handleDatabaseAction(action)
                             }
-                            launch {
-                                profileFlow.collect { action ->
-                                    val profileId = when (action) {
-                                        is PostgresAction.Update -> action.record["id"]?.toString()?.trim('"')
-                                        is PostgresAction.Insert -> action.record["id"]?.toString()?.trim('"')
-                                        else -> null
+                        }
+                    }
+                    myChannel.subscribe()
+
+                    // --- PELÍCULAS ---
+                    val moviesChannel = supabase.realtime.channel("public-movies")
+                    val moviesFlow = moviesChannel.postgresChangeFlow<PostgresAction>(schema = "public") {
+                        table = "movies"
+                    }
+                    launch {
+                        moviesFlow.collect { observeMovies() }
+                    }
+                    moviesChannel.subscribe()
+
+                    // --- MENSAJES GLOBALES ---
+                    val messagesChannel = supabase.realtime.channel("global-messages")
+                    val messagesFlow = messagesChannel.postgresChangeFlow<PostgresAction>(schema = "public") {
+                        table = "global_messages"
+                    }
+                    launch {
+                        messagesFlow.collect { action ->
+                            withContext(Dispatchers.Main) {
+                                handleGlobalMessageAction(action)
+                            }
+                        }
+                    }
+                    messagesChannel.subscribe()
+
+                    // --- ESCUCHAR CAMBIOS EN TABLA 'users' ---
+                    launch {
+                        supabase.auth.sessionStatus.collectLatest { status ->
+                            if (status is SessionStatus.Authenticated) {
+                                val user = status.session.user
+                                if (user != null) {
+                                    val profileChannel = supabase.realtime.channel("user-data-sync")
+                                    val profileFlow = profileChannel.postgresChangeFlow<PostgresAction>(schema = "public") {
+                                        table = "users"
                                     }
-                                    if (profileId == user.id) {
-                                        Log.d("Onyx", "Realtime: Cambio detectado para usuario: $profileId")
-                                        checkAuthorization()
+                                    launch {
+                                        profileFlow.collect { action ->
+                                            val profileId = when (action) {
+                                                is PostgresAction.Update -> action.record["id"]?.toString()?.trim('"')
+                                                is PostgresAction.Insert -> action.record["id"]?.toString()?.trim('"')
+                                                else -> null
+                                            }
+                                            if (profileId == user.id) {
+                                                Log.d("Onyx", "Realtime: Cambio detectado para usuario: $profileId")
+                                                checkAuthorization()
+                                            }
+                                        }
                                     }
+                                    profileChannel.subscribe()
                                 }
                             }
-                            profileChannel.subscribe()
                         }
                     }
-                }
 
-            } catch (e: Exception) {
-                Log.e("Onyx", "Error conectando Realtime", e)
+                    // Monitorear estado de conexión
+                    supabase.realtime.status.collect { status ->
+                        Log.d("OnyxRealtime", "Estado: $status")
+                        if (status == Realtime.Status.DISCONNECTED) {
+                           // El bucle while volverá a intentar la conexión
+                        }
+                    }
+                    break // Salir del bucle si todo se configuró bien
+
+                } catch (e: Exception) {
+                    Log.e("OnyxRealtime", "Error en setupRealtime, reintentando en 5s...", e)
+                    delay(5000)
+                }
             }
         }
     }
@@ -343,20 +361,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun syncTimeWithNetwork() {
         viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val connection = URL("http://www.google.com").openConnection()
-                connection.connectTimeout = 5000
-                val dateHeader = connection.getHeaderField("Date")
-                if (dateHeader != null) {
-                    val sdf = SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss z", Locale.US)
-                    val networkDate = sdf.parse(dateHeader)
-                    if (networkDate != null) {
-                        networkOffset = networkDate.time - SystemClock.elapsedRealtime()
-                        isTimeSynced = true
+            var synced = false
+            var attempts = 0
+            while (!synced && attempts < 5) {
+                try {
+                    val connection = URL("http://www.google.com").openConnection()
+                    connection.connectTimeout = 5000
+                    val dateHeader = connection.getHeaderField("Date")
+                    if (dateHeader != null) {
+                        val sdf = SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss z", Locale.US)
+                        val networkDate = sdf.parse(dateHeader)
+                        if (networkDate != null) {
+                            networkOffset = networkDate.time - SystemClock.elapsedRealtime()
+                            isTimeSynced = true
+                            synced = true
+                        }
                     }
+                } catch (e: Exception) {
+                    attempts++
+                    Log.e("Onyx", "Time sync attempt $attempts failed: ${e.message}")
+                    delay(3000)
                 }
-            } catch (e: Exception) {
-                Log.e("Onyx", "Time sync failed: ${e.message}")
             }
         }
     }
@@ -625,22 +650,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private fun observeChannels() {
         isLoading = true
         viewModelScope.launch {
-            try {
-                val channels = supabase.postgrest["channels"]
-                    .select {
-                        order("order", io.github.jan.supabase.postgrest.query.Order.ASCENDING)
-                    }.decodeList<Channel>()
+            var attempts = 0
+            while (attempts < 3) {
+                try {
+                    val channels = supabase.postgrest["channels"]
+                        .select {
+                            order("order", io.github.jan.supabase.postgrest.query.Order.ASCENDING)
+                        }.decodeList<Channel>()
 
-                allChannels = channels
-                filterChannels()
-                onChannelsLoaded()
-            } catch (e: Exception) {
-                Log.e("Onyx", "Error observing channels", e)
-                if (e.message?.contains("JWT expired", ignoreCase = true) == true) {
-                    try { supabase.auth.refreshCurrentSession() } catch(_: Exception) {}
+                    allChannels = channels
+                    filterChannels()
+                    onChannelsLoaded()
+                    break
+                } catch (e: Exception) {
+                    attempts++
+                    Log.e("Onyx", "Error observing channels (attempt $attempts)", e)
+                    if (e.message?.contains("JWT expired", ignoreCase = true) == true) {
+                        try { supabase.auth.refreshCurrentSession() } catch(_: Exception) {}
+                    }
+                    if (attempts < 3) delay(2000)
+                } finally {
+                    if (attempts >= 3) isLoading = false
                 }
-            } finally {
-                isLoading = false
             }
         }
     }
